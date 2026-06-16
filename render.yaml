@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: quant-trading-system
+    runtime: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    envVars:
+      - key: FLASK_DEBUG
+        value: "false"

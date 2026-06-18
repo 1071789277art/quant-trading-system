@@ -3,11 +3,7 @@ services:
     name: quantx-trading
     runtime: docker
     dockerfilePath: Dockerfile
-    plan: starter
-    disk:
-      name: data
-      mountPath: /app/data
-      sizeGB: 1
+    plan: free
     envVars:
       - key: FLASK_SECRET_KEY
         generateValue: true

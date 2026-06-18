@@ -54,8 +54,10 @@ class DailyTrader:
         universe: List[str] = None,
         initial_capital: float = 1_000_000,
         params: dict = None,
+        user_id: int = None,
     ):
         self.market = market
+        self.user_id = user_id
         if universe:
             self.universe = universe
         elif market == "US":
@@ -101,8 +103,6 @@ class DailyTrader:
     # 持久化
     # ------------------------------------------------------------------
     def save(self):
-        os.makedirs(STATE_DIR, exist_ok=True)
-        path = _state_file(self.market)
         state = {
             "market": self.market,
             "universe": self.universe,
@@ -121,12 +121,57 @@ class DailyTrader:
             "current_picks": self._current_picks,
             "updated_at": datetime.now().isoformat(),
         }
+        if self.user_id:
+            try:
+                from dashboard.models import save_daily_state
+                save_daily_state(self.user_id, self.market, state)
+                logger.info(f"状态已保存到DB({self.market}): user={self.user_id}, bar_count={self.bar_count}")
+                return
+            except Exception as e:
+                logger.warning(f"DB保存失败，回退JSON: {e}")
+        # JSON fallback (standalone/cron)
+        os.makedirs(STATE_DIR, exist_ok=True)
+        path = _state_file(self.market)
         with open(path, "w") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
         logger.info(f"状态已保存({self.market}): bar_count={self.bar_count}, cash={self.cash:.2f}")
 
     @classmethod
-    def load_or_create(cls, market: str = "A_SHARE", **kwargs) -> "DailyTrader":
+    def load_or_create(cls, market: str = "A_SHARE", user_id: int = None, **kwargs) -> "DailyTrader":
+        # Multi-user mode: SQLite only, no JSON fallback
+        if user_id:
+            try:
+                from dashboard.models import get_daily_state
+                state = get_daily_state(user_id, market)
+                if state:
+                    trader = cls(
+                        market=state.get("market", market),
+                        universe=state.get("universe"),
+                        initial_capital=state.get("initial_capital", 1_000_000),
+                        params=state.get("params"),
+                        user_id=user_id,
+                    )
+                    trader.cash = state.get("cash", trader.initial_capital)
+                    trader.positions = state.get("positions", {})
+                    trader.trade_log = state.get("trade_log", [])
+                    trader.equity_history = state.get("equity_history", [])
+                    trader.screen_log = state.get("screen_log", [])
+                    trader.bar_count = state.get("bar_count", 0)
+                    trader.last_run_date = state.get("last_run_date")
+                    trader.total_trades = state.get("total_trades", 0)
+                    trader.is_profit = state.get("is_profit", False)
+                    trader.created_at = state.get("created_at", datetime.now().isoformat())
+                    trader._current_picks = state.get("current_picks", [])
+                    logger.info(f"状态已从DB恢复({market}): user={user_id}, 第{trader.bar_count}个交易日")
+                    return trader
+            except Exception as e:
+                logger.warning(f"DB加载失败: {e}")
+            # No state in DB → create fresh trader for this user
+            kwargs.setdefault("market", market)
+            kwargs["user_id"] = user_id
+            return cls(**kwargs)
+
+        # Standalone/cron mode: JSON file only
         path = _state_file(market)
         if os.path.exists(path):
             try:
@@ -137,6 +182,7 @@ class DailyTrader:
                     universe=state.get("universe"),
                     initial_capital=state.get("initial_capital", 1_000_000),
                     params=state.get("params"),
+                    user_id=user_id,
                 )
                 trader.cash = state.get("cash", trader.initial_capital)
                 trader.positions = state.get("positions", {})
@@ -154,6 +200,7 @@ class DailyTrader:
             except Exception as e:
                 logger.error(f"恢复状态失败: {e}, 创建新实例")
         kwargs.setdefault("market", market)
+        kwargs["user_id"] = user_id
         return cls(**kwargs)
 
     # ------------------------------------------------------------------

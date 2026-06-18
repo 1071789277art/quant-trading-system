@@ -296,12 +296,14 @@ class PaperTradingSession:
         market: str = "US",
         initial_capital: float = None,
         tick_interval: int = 10,
+        user_id: int = None,
     ):
         self.strategy = strategy
         self.symbols = symbols
         self.market = market
         self.initial_capital = initial_capital or config.DEFAULT_CAPITAL
         self.tick_interval = tick_interval  # 轮询间隔（秒）
+        self.user_id = user_id
         self.fetcher = DataFetcher(cache_dir=config.DATA_DIR)
 
         # 状态
@@ -312,7 +314,7 @@ class PaperTradingSession:
         self.is_running = False
         self._thread: Optional[threading.Thread] = None
 
-        # 持久化路径
+        # 持久化路径 (JSON fallback)
         self._state_dir = os.path.join(os.path.dirname(__file__), "..", "data", "paper_state")
         os.makedirs(self._state_dir, exist_ok=True)
         self._state_file = os.path.join(self._state_dir, f"session_{strategy.name}.json")
@@ -484,44 +486,69 @@ class PaperTradingSession:
         }
 
     def _save_state(self):
+        state = {
+            "cash": self.portfolio.cash,
+            "signals_history": self.signals_history[-100:],
+            "equity_history": self.equity_history[-100:],
+            "trade_log": self.trade_log[-100:],
+            "positions": {
+                sym: {"symbol": p.symbol, "quantity": p.quantity, "avg_cost": p.avg_cost,
+                      "current_price": p.current_price,
+                      "entry_date": p.entry_date.isoformat() if p.entry_date else None}
+                for sym, p in self.portfolio.positions.items()
+            },
+        }
+        if self.user_id:
+            try:
+                from dashboard.models import save_paper_state
+                save_paper_state(self.user_id, self.strategy.name, state)
+                return
+            except Exception as e:
+                logger.warning(f"DB保存模拟状态失败，回退JSON: {e}")
+        # JSON fallback
         try:
-            state = {
-                "cash": self.portfolio.cash,
-                "signals_history": self.signals_history[-100:],
-                "equity_history": self.equity_history[-100:],
-                "trade_log": self.trade_log[-100:],
-                "positions": {
-                    sym: {"symbol": p.symbol, "quantity": p.quantity, "avg_cost": p.avg_cost,
-                          "current_price": p.current_price,
-                          "entry_date": p.entry_date.isoformat() if p.entry_date else None}
-                    for sym, p in self.portfolio.positions.items()
-                },
-            }
             with open(self._state_file, "w") as f:
                 json.dump(state, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"保存状态失败: {e}")
 
     def load_state(self):
+        # Try SQLite first (multi-user mode)
+        if self.user_id:
+            try:
+                from dashboard.models import get_paper_state
+                state = get_paper_state(self.user_id, self.strategy.name)
+                if state:
+                    self._apply_state(state)
+                    logger.info(f"模拟状态已从DB恢复: {self.strategy.name}, user={self.user_id}")
+                    return
+            except Exception as e:
+                logger.warning(f"DB加载模拟状态失败，回退JSON: {e}")
+
+        # JSON fallback
         if not os.path.exists(self._state_file):
             return
         try:
             with open(self._state_file) as f:
                 state = json.load(f)
-            self.portfolio.cash = state.get("cash", self.initial_capital)
-            self.signals_history = state.get("signals_history", [])
-            self.equity_history = state.get("equity_history", [])
-            self.trade_log = state.get("trade_log", [])
-            for sym, pd_ in state.get("positions", {}).items():
-                entry = pd_.get("entry_date")
-                self.portfolio.positions[sym] = Position(
-                    symbol=pd_["symbol"], quantity=pd_["quantity"],
-                    avg_cost=pd_["avg_cost"], current_price=pd_["current_price"],
-                    entry_date=datetime.fromisoformat(entry) if entry else None,
-                )
+            self._apply_state(state)
             logger.info(f"状态恢复成功: {self.strategy.name}")
         except Exception as e:
             logger.error(f"恢复状态失败: {e}")
+
+    def _apply_state(self, state: dict):
+        """从 dict 恢复内存状态"""
+        self.portfolio.cash = state.get("cash", self.initial_capital)
+        self.signals_history = state.get("signals_history", [])
+        self.equity_history = state.get("equity_history", [])
+        self.trade_log = state.get("trade_log", [])
+        for sym, pd_ in state.get("positions", {}).items():
+            entry = pd_.get("entry_date")
+            self.portfolio.positions[sym] = Position(
+                symbol=pd_["symbol"], quantity=pd_["quantity"],
+                avg_cost=pd_["avg_cost"], current_price=pd_["current_price"],
+                entry_date=datetime.fromisoformat(entry) if entry else None,
+            )
 
 
 # ======================================================================
@@ -532,29 +559,45 @@ class PaperTradingManager:
         self.sessions: Dict[str, PaperTradingSession] = {}
         self.auto_traders: Dict[str, AutoTrader] = {}
 
+    def _user_key(self, key: str, user_id: int = None) -> str:
+        """生成用户隔离的复合 key"""
+        if user_id:
+            return f"{user_id}:{key}"
+        return key
+
     def create_session(self, session_id, strategy, symbols, market="US",
-                       initial_capital=None, tick_interval=10):
-        session = PaperTradingSession(strategy, symbols, market, initial_capital, tick_interval)
+                       initial_capital=None, tick_interval=10, user_id=None):
+        full_key = self._user_key(session_id, user_id)
+        session = PaperTradingSession(strategy, symbols, market, initial_capital,
+                                       tick_interval, user_id=user_id)
         session.load_state()
-        self.sessions[session_id] = session
+        self.sessions[full_key] = session
         return session
 
-    def get_session(self, session_id):
-        return self.sessions.get(session_id)
+    def get_session(self, session_id, user_id=None):
+        full_key = self._user_key(session_id, user_id)
+        return self.sessions.get(full_key)
 
     def create_auto_trader(self, trader_id, strategy, symbols, market="US",
-                           initial_capital=None, speed_ms=0):
+                           initial_capital=None, speed_ms=0, user_id=None):
+        full_key = self._user_key(trader_id, user_id)
         trader = AutoTrader(strategy, symbols, market, initial_capital, speed_ms=speed_ms)
-        self.auto_traders[trader_id] = trader
+        self.auto_traders[full_key] = trader
         return trader
 
-    def get_auto_trader(self, trader_id):
-        return self.auto_traders.get(trader_id)
+    def get_auto_trader(self, trader_id, user_id=None):
+        full_key = self._user_key(trader_id, user_id)
+        return self.auto_traders.get(full_key)
 
-    def get_all_status(self):
-        result = {sid: s.get_status() for sid, s in self.sessions.items()}
+    def get_all_status(self, user_id=None):
+        result = {}
+        prefix = f"{user_id}:" if user_id else None
+        for sid, s in self.sessions.items():
+            if prefix is None or sid.startswith(prefix):
+                result[sid] = s.get_status()
         for tid, t in self.auto_traders.items():
-            result[f"auto_{tid}"] = t.get_status()
+            if prefix is None or tid.startswith(prefix):
+                result[f"auto_{tid}"] = t.get_status()
         return result
 
     def stop_all(self):

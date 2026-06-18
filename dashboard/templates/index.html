@@ -134,6 +134,20 @@
         }
         .metric-positive { color: var(--green); }
         .metric-negative { color: var(--red); }
+        .fo-filter-card { position: relative; }
+        .fo-filter-card:hover { border-color: var(--accent); }
+        .fo-filter-card.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 1px var(--accent);
+        }
+        .fo-filter-card.active::after {
+            content: '';
+            position: absolute;
+            top: 6px; right: 8px;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
         .metric-neutral { color: var(--accent); }
 
         /* 表格 */
@@ -225,6 +239,28 @@
         .kline-body {
             padding: 0.5rem 0.8rem;
             overflow-y: auto; flex: 1;
+        }
+
+        /* 基金详情弹窗 */
+        .fund-code-link {
+            color: var(--accent); cursor: pointer; font-weight: 600;
+            text-decoration: none; font-family: monospace;
+        }
+        .fund-code-link:hover { color: var(--accent2); text-decoration: underline; }
+        .fund-detail-metrics {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+            margin-bottom: 1rem;
+        }
+        .fund-detail-metrics .fdm-item {
+            background: var(--bg-secondary); border-radius: 6px; padding: 8px 10px;
+            text-align: center;
+        }
+        .fund-detail-metrics .fdm-label {
+            font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase;
+            letter-spacing: 0.3px; margin-bottom: 2px;
+        }
+        .fund-detail-metrics .fdm-value {
+            font-size: 1rem; font-weight: 700;
         }
         .kline-toolbar {
             display: flex; gap: 6px; padding: 0 1.2rem 0.5rem;
@@ -534,6 +570,92 @@
             font-size: 0.88rem;
             margin: 0;
         }
+
+        /* ===== 我的持仓 ===== */
+        .pf-action-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 0.8rem;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+        .pf-action-btn:hover { color: var(--accent); background: rgba(79,172,254,0.1); }
+        .pf-action-btn.danger:hover { color: var(--red); background: rgba(255,77,106,0.1); }
+        .pf-edit-input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            width: 80px;
+            font-size: 0.8rem;
+        }
+        .pf-hint {
+            display: block;
+            color: #8899aa;
+            font-size: 0.78rem;
+            margin-top: 4px;
+            margin-bottom: 2px;
+            line-height: 1.4;
+            padding-left: 2px;
+        }
+        .pf-intro {
+            background: rgba(79,172,254,0.06);
+            border: 1px solid rgba(79,172,254,0.15);
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            font-size: 0.78rem;
+            color: #8899aa;
+            line-height: 1.6;
+        }
+        .pf-intro strong {
+            color: var(--accent);
+            font-weight: 600;
+        }
+        .pf-intro .pf-intro-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+        .pf-intro .pf-intro-item:last-child {
+            margin-bottom: 0;
+        }
+        .pf-intro .pf-intro-icon {
+            flex-shrink: 0;
+            width: 16px;
+            text-align: center;
+            color: var(--accent);
+            margin-top: 1px;
+        }
+        .pf-lookup-box {
+            background: rgba(79,172,254,0.04);
+            border: 1px solid rgba(79,172,254,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin: 10px 0;
+        }
+        .pf-lookup-row {
+            margin-bottom: 8px;
+        }
+        .pf-lookup-row:last-child {
+            margin-bottom: 0;
+        }
+        .pf-lookup-label {
+            display: block;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-bottom: 3px;
+            font-weight: 500;
+        }
+        .pf-lookup-box .form-control,
+        .pf-lookup-box .form-select {
+            font-size: 0.85rem;
+        }
     </style>
 </head>
 <body>
@@ -541,40 +663,82 @@
 <!-- 导航栏 -->
 <nav class="navbar" style="display:flex;align-items:center;justify-content:space-between;">
     <span class="navbar-brand"><i class="fas fa-chart-line"></i>稳赢量化交易系统</span>
-    <div style="display:flex;align-items:center;gap:10px;">
-        <span style="color:var(--text-secondary);font-size:0.82rem;">当前市场:</span>
+    <div style="display:flex;align-items:center;gap:14px;">
+        <div class="market-toggle-group" id="mode-toggle-group">
+            <button class="market-toggle-btn active" data-mode="stock" onclick="switchMode('stock')">
+                <i class="fas fa-chart-line"></i> 股票模式
+            </button>
+            <button class="market-toggle-btn" data-mode="fund" onclick="switchMode('fund')">
+                <i class="fas fa-pie-chart"></i> 基金模式
+            </button>
+        </div>
+        <div id="market-separator" style="width:1px;height:22px;background:var(--border);"></div>
+        <span id="market-label" style="color:var(--text-secondary);font-size:0.8rem;white-space:nowrap;">当前市场:</span>
         <div id="global-market-toggle" class="market-toggle-group">
-            <button class="market-toggle-btn active" data-market="A_SHARE" onclick="switchGlobalMarket('A_SHARE')">A股</button>
-            <button class="market-toggle-btn" data-market="US" onclick="switchGlobalMarket('US')">美股</button>
+            <button class="market-toggle-btn active" data-market="A_SHARE" onclick="switchGlobalMarket('A_SHARE')">
+                <i class="fas fa-flag"></i> A股
+            </button>
+            <button class="market-toggle-btn" data-market="US" onclick="switchGlobalMarket('US')">
+                <i class="fas fa-globe-americas"></i> 美股
+            </button>
+        </div>
+        <div id="user-separator" style="width:1px;height:22px;background:var(--border);"></div>
+        <div id="user-status-bar" style="display:flex;align-items:center;gap:8px;white-space:nowrap;">
+            <span id="user-display" style="color:var(--text-secondary);font-size:0.8rem;">
+                <i class="fas fa-spinner fa-spin"></i>
+            </span>
+            <a id="user-logout-btn" href="/auth/logout" style="display:none;color:var(--accent);font-size:0.8rem;text-decoration:none;">
+                <i class="fas fa-sign-out-alt"></i> 退出
+            </a>
         </div>
     </div>
 </nav>
 
 <!-- Tab导航 -->
 <ul class="nav nav-tabs" id="mainTabs">
-    <li class="nav-item">
+    <li class="nav-item" data-mode="stock">
         <a class="nav-link active" data-bs-toggle="tab" href="#tab-backtest">
             <i class="fas fa-flask"></i> 策略回测
         </a>
     </li>
-    <li class="nav-item">
+    <li class="nav-item" data-mode="stock">
         <a class="nav-link" data-bs-toggle="tab" href="#tab-compare">
             <i class="fas fa-balance-scale"></i> 策略对比
         </a>
     </li>
-    <li class="nav-item">
+    <li class="nav-item" data-mode="stock">
         <a class="nav-link" data-bs-toggle="tab" href="#tab-paper">
             <i class="fas fa-play-circle"></i> 模拟交易
         </a>
     </li>
-    <li class="nav-item">
+    <li class="nav-item" data-mode="stock">
         <a class="nav-link" data-bs-toggle="tab" href="#tab-smart">
             <i class="fas fa-brain"></i> 智能选股
         </a>
     </li>
-    <li class="nav-item">
+    <li class="nav-item" data-mode="stock">
         <a class="nav-link" data-bs-toggle="tab" href="#tab-daily">
             <i class="fas fa-calendar-check"></i> 每日实盘
+        </a>
+    </li>
+    <li class="nav-item" data-mode="fund">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-fund-overview">
+            <i class="fas fa-landmark"></i> 基金大盘
+        </a>
+    </li>
+    <li class="nav-item" data-mode="fund">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-fund-dynamics">
+            <i class="fas fa-chart-line"></i> 基金动态
+        </a>
+    </li>
+    <li class="nav-item" data-mode="fund">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-fund-picker">
+            <i class="fas fa-gem"></i> 智能选基
+        </a>
+    </li>
+    <li class="nav-item" data-mode="both">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-portfolio">
+            <i class="fas fa-wallet"></i> 我的持仓
         </a>
     </li>
 </ul>
@@ -1326,9 +1490,662 @@
             </div>
         </div>
     </div>
-</div>
 
-<!-- 加载动画 -->
+    <!-- ===================== 基金大盘 ===================== -->
+    <div class="tab-pane fade" id="tab-fund-overview">
+        <div class="row">
+            <!-- 左侧控制面板 -->
+            <div class="col-lg-3 sidebar">
+                <div class="card mb-3">
+                    <div class="card-header"><i class="fas fa-landmark"></i> 基金大盘概览</div>
+                    <div class="card-body">
+                        <div class="param-group">
+                            <label>时间范围</label>
+                            <select class="form-select" id="fund-overview-period" onchange="loadFundOverview()">
+                                <option value="1m">近1月</option>
+                                <option value="3m">近3月</option>
+                                <option value="6m" selected>近6月</option>
+                                <option value="1y">近1年</option>
+                                <option value="all">全部</option>
+                            </select>
+                        </div>
+                        <div class="param-group">
+                            <label>基金类型</label>
+                            <select class="form-select" id="fund-overview-type" onchange="loadFundOverview()">
+                                <option value="all">全部</option>
+                                <option value="gp">股票型</option>
+                                <option value="hh">混合型</option>
+                                <option value="zq">债券型</option>
+                                <option value="zs">指数型</option>
+                                <option value="qdii">QDII</option>
+                                <option value="fof">FOF</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary w-100 mt-2" onclick="loadFundOverview()">
+                            <i class="fas fa-sync-alt"></i> 刷新数据
+                        </button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-building"></i> 头部基金公司 TOP20</div>
+                    <div class="card-body p-0" style="max-height:500px;overflow-y:auto;">
+                        <table class="table table-sm mb-0">
+                            <thead><tr><th>#</th><th>公司</th><th>规模(亿)</th><th>基金数</th></tr></thead>
+                            <tbody id="fund-company-tbody">
+                                <tr><td colspan="4" class="text-center text-muted">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧内容区域 -->
+            <div class="col-lg-9">
+                <!-- 指标卡片 -->
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3"><div class="metric-card"><div class="metric-label">全市场总规模</div><div class="metric-value metric-neutral" id="fo-total-scale">--</div></div></div>
+                    <div class="col-6 col-md-3"><div class="metric-card"><div class="metric-label">基金总数</div><div class="metric-value metric-neutral" id="fo-total-count">--</div></div></div>
+                    <div class="col-6 col-md-3"><div class="metric-card"><div class="metric-label">今日平均涨跌</div><div class="metric-value" id="fo-avg-change">--</div></div></div>
+                    <div class="col-6 col-md-3"><div class="metric-card"><div class="metric-label">近1月平均收益</div><div class="metric-value" id="fo-avg-1m">--</div></div></div>
+                </div>
+
+                <!-- 实时行情数据 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-broadcast-tower"></i> 实时行情数据</span>
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <label style="font-size:0.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                                <input type="checkbox" id="fo-rt-auto" onchange="toggleFundOverviewRealtime()"> 自动刷新
+                            </label>
+                            <button class="btn btn-sm btn-outline-info" onclick="loadFundOverviewRealtime()">
+                                <i class="fas fa-sync-alt"></i> 刷新
+                            </button>
+                            <span style="font-size:0.75rem;color:var(--text-secondary);" id="fo-rt-timer">--</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- 实时情绪指标卡 -->
+                <div class="row g-3 mb-3" id="fo-rt-cards">
+                    <div class="col-6 col-md-3">
+                        <div class="metric-card fo-filter-card active" id="fo-card-all" onclick="filterFoRtTable('all')" style="cursor:pointer;transition:all 0.2s;" title="点击查看全部基金">
+                            <div class="metric-label">全部基金 <i class="fas fa-filter" style="font-size:0.7rem;opacity:0.5;"></i></div>
+                            <div class="metric-value metric-neutral" id="fo-rt-all-count">--</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="metric-card fo-filter-card" id="fo-card-up" onclick="filterFoRtTable('up')" style="cursor:pointer;transition:all 0.2s;" title="点击只看上涨基金">
+                            <div class="metric-label">上涨基金 <i class="fas fa-arrow-up" style="font-size:0.7rem;opacity:0.6;"></i></div>
+                            <div class="metric-value" id="fo-rt-up-count" style="color:var(--green);">--</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="metric-card fo-filter-card" id="fo-card-down" onclick="filterFoRtTable('down')" style="cursor:pointer;transition:all 0.2s;" title="点击只看下跌基金">
+                            <div class="metric-label">下跌基金 <i class="fas fa-arrow-down" style="font-size:0.7rem;opacity:0.6;"></i></div>
+                            <div class="metric-value" id="fo-rt-down-count" style="color:var(--red);">--</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="metric-card" title="样本基金的实时估值平均涨跌幅">
+                            <div class="metric-label">实时平均涨跌 <i class="fas fa-question-circle" style="font-size:0.7rem;opacity:0.5;"></i></div>
+                            <div class="metric-value" id="fo-rt-avg-change">--</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 实时估值排行表 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-trophy"></i> 实时估值排行 TOP30</span>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);" id="fo-rt-summary-line">--</span>
+                    </div>
+                    <div class="card-body p-0" style="overflow-x:auto;max-height:480px;overflow-y:auto;">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th title="基金代码，点击可查看详情">代码</th>
+                                    <th>名称</th>
+                                    <th title="昨日单位净值">昨日净值</th>
+                                    <th title="盘中实时估算净值">实时估值</th>
+                                    <th title="实时估算涨跌幅">估值涨跌%</th>
+                                    <th title="数据更新时间">更新时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fo-rt-tbody">
+                                <tr><td colspan="7" class="text-center text-muted">点击"刷新"或开启自动刷新查看实时估值</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 规模趋势图 -->
+                <div class="card mb-3">
+                    <div class="card-header"><i class="fas fa-chart-area"></i> 全市场规模趋势</div>
+                    <div class="card-body p-2"><div id="fund-scale-chart" class="chart-container"></div></div>
+                </div>
+                <!-- 类型分布 -->
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-chart-pie"></i> 基金类型分布</div>
+                    <div class="card-body p-2"><div id="fund-type-chart" class="chart-container"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== 基金动态 ===================== -->
+    <div class="tab-pane fade" id="tab-fund-dynamics">
+        <div class="row">
+            <!-- 左侧控制面板 -->
+            <div class="col-lg-3 sidebar">
+                <div class="card mb-3">
+                    <div class="card-header"><i class="fas fa-chart-line"></i> 基金动态</div>
+                    <div class="card-body">
+                        <div class="param-group">
+                            <label>基金类型</label>
+                            <select class="form-select" id="fund-rank-type" onchange="loadFundRanking()">
+                                <option value="all">全部</option>
+                                <option value="gp">股票型</option>
+                                <option value="hh">混合型</option>
+                                <option value="zq">债券型</option>
+                                <option value="zs">指数型</option>
+                                <option value="qdii">QDII</option>
+                                <option value="fof">FOF</option>
+                            </select>
+                        </div>
+                        <div class="param-group">
+                            <label>排序方式</label>
+                            <select class="form-select" id="fund-rank-sort" onchange="loadFundRanking()">
+                                <option value="rzdf">日涨幅</option>
+                                <option value="1yzf">近1周</option>
+                                <option value="1nzf" selected>近1年</option>
+                                <option value="jnzf">今年来</option>
+                                <option value="3nzf">近3年</option>
+                                <option value="lnzf">成立以来</option>
+                            </select>
+                        </div>
+                        <div class="param-group">
+                            <label>显示数量</label>
+                            <select class="form-select" id="fund-rank-top" onchange="loadFundRanking()">
+                                <option value="20">TOP 20</option>
+                                <option value="50">TOP 50</option>
+                                <option value="100" selected>TOP 100</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary w-100 mb-2" onclick="loadFundRanking()">
+                            <i class="fas fa-sync-alt"></i> 刷新排行
+                        </button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-search"></i> 基金实时估值</div>
+                    <div class="card-body">
+                        <div class="param-group">
+                            <label>输入基金代码</label>
+                            <div style="display:flex;gap:6px;">
+                                <input type="text" class="form-control" id="fund-realtime-code" placeholder="如 000001">
+                                <button class="btn btn-primary" onclick="loadFundRealtime()" style="white-space:nowrap;">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="fund-realtime-card" style="display:none;">
+                            <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+                                <div style="font-weight:600;margin-bottom:6px;" id="fr-name">--</div>
+                                <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:2px;">
+                                    最新净值: <span id="fr-nav" style="color:var(--text-primary);font-weight:600;">--</span>
+                                </div>
+                                <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:2px;">
+                                    估算净值: <span id="fr-est-nav" style="font-weight:600;">--</span>
+                                </div>
+                                <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:2px;">
+                                    估算涨跌: <span id="fr-est-change" style="font-weight:600;">--</span>
+                                </div>
+                                <div style="font-size:0.78rem;color:var(--text-secondary);">
+                                    更新时间: <span id="fr-time">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧内容区域 -->
+            <div class="col-lg-9">
+                <!-- 实时涨跌监控 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-broadcast-tower"></i> 实时涨跌监控</span>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span id="fund-rt-timer" style="font-size:0.72rem;color:var(--text-secondary);">
+                                <i class="fas fa-clock"></i> --
+                            </span>
+                            <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;color:var(--text-secondary);cursor:pointer;margin:0;">
+                                <input type="checkbox" id="fund-rt-auto" onchange="toggleFundRealtimeAuto()" checked> 自动刷新
+                            </label>
+                            <select id="fund-rt-count" class="form-select" style="width:90px;padding:2px 6px;font-size:0.78rem;" onchange="refreshFundRealtime()">
+                                <option value="10">TOP 10</option>
+                                <option value="20" selected>TOP 20</option>
+                                <option value="50">TOP 50</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline-primary" onclick="refreshFundRealtime()" style="padding:2px 10px;font-size:0.78rem;">
+                                <i class="fas fa-sync-alt"></i> 刷新
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0" style="max-height:320px;overflow-y:auto;">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>代码</th><th>名称</th><th>上期净值</th>
+                                    <th>估算净值</th><th>估算涨跌%</th><th>更新时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fund-rt-tbody">
+                                <tr><td colspan="7" class="text-center text-muted">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- 排行表格 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-trophy"></i> 基金涨跌排行</span>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);" id="fund-rank-info">--</span>
+                    </div>
+                    <div class="card-body p-0" style="max-height:550px;overflow-y:auto;">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>代码</th><th>名称</th><th>最新净值</th>
+                                    <th>日涨跌%</th><th>近1周%</th><th>近1月%</th><th>近3月%</th>
+                                    <th>近6月%</th><th>近1年%</th><th>近2年%</th><th>近3年%</th><th>今年来%</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fund-rank-tbody">
+                                <tr><td colspan="13" class="text-center text-muted">点击左侧参数加载排行...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- 净值走势图 -->
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-chart-area"></i> 净值走势 <small class="text-muted ms-2" id="fund-nav-title">点击排行中基金查看走势</small></div>
+                    <div class="card-body p-2"><div id="fund-nav-chart" class="chart-container"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== 智能选基 ===================== -->
+    <div class="tab-pane fade" id="tab-fund-picker">
+        <div class="row">
+            <!-- 左侧控制面板 -->
+            <div class="col-lg-3 sidebar">
+                <div class="card mb-3">
+                    <div class="card-header"><i class="fas fa-gem"></i> 智能选基</div>
+                    <div class="card-body">
+                        <div class="param-group">
+                            <label>基金类型</label>
+                            <select class="form-select" id="fp-type">
+                                <option value="all">全部</option>
+                                <option value="gp">股票型</option>
+                                <option value="hh">混合型</option>
+                                <option value="zq">债券型</option>
+                                <option value="zs">指数型</option>
+                                <option value="qdii">QDII</option>
+                                <option value="fof">FOF</option>
+                            </select>
+                        </div>
+                        <div class="param-group">
+                            <label>近1年收益(%) ≥</label>
+                            <input type="number" class="form-control" id="fp-min-return" value="10" step="5">
+                        </div>
+                        <div class="param-group">
+                            <label>最大回撤(%) ≤</label>
+                            <input type="number" class="form-control" id="fp-max-drawdown" value="20" step="5">
+                        </div>
+                        <div class="param-group">
+                            <label>基金规模(亿) ≥</label>
+                            <input type="number" class="form-control" id="fp-min-scale" value="2" step="1">
+                        </div>
+                        <div class="param-group">
+                            <label>排序字段</label>
+                            <select class="form-select" id="fp-sort">
+                                <option value="1nzf">近1年收益</option>
+                                <option value="3nzf">近3年收益</option>
+                                <option value="jnzf">今年来收益</option>
+                                <option value="rzdf">日涨幅</option>
+                            </select>
+                        </div>
+                        <div class="param-group">
+                            <label>推荐数量</label>
+                            <select class="form-select" id="fp-top-n">
+                                <option value="5">TOP 5</option>
+                                <option value="10">TOP 10</option>
+                                <option value="20">TOP 20</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="runFundScreen()">
+                            <i class="fas fa-search-dollar"></i> 开始筛选
+                        </button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-star"></i> TOP推荐</div>
+                    <div class="card-body p-0" style="max-height:400px;overflow-y:auto;">
+                        <table class="table table-sm mb-0">
+                            <thead><tr><th>#</th><th>基金</th><th>近1年%</th><th>理由</th></tr></thead>
+                            <tbody id="fp-recommend-tbody">
+                                <tr><td colspan="4" class="text-center text-muted">等待筛选...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧内容区域 -->
+            <div class="col-lg-9">
+                <!-- 筛选结果 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-list"></i> 筛选结果</span>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);" id="fp-result-info">--</span>
+                    </div>
+                    <div class="card-body p-0" style="max-height:400px;overflow-y:auto;">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="fp-check-all" onchange="toggleFundCheckAll(this)"></th>
+                                    <th>代码</th><th>名称</th><th>类型</th>
+                                    <th>近1月%</th><th>近3月%</th><th>近1年%</th><th>今年来%</th>
+                                    <th>最大回撤%</th><th>规模(亿)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fp-result-tbody">
+                                <tr><td colspan="10" class="text-center text-muted">设置条件后点击"开始筛选"</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- 对比操作 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-chart-line"></i> 基金对比</span>
+                        <button class="btn btn-sm btn-primary" onclick="compareSelectedFunds()">
+                            <i class="fas fa-balance-scale"></i> 对比选中基金
+                        </button>
+                    </div>
+                    <div class="card-body p-2"><div id="fund-compare-chart" class="chart-container"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== 我的持仓 ===================== -->
+    <div class="tab-pane fade" id="tab-portfolio">
+        <div class="row">
+            <!-- 左侧控制面板 -->
+            <div class="col-lg-3 sidebar">
+                <!-- 股票持仓区域 -->
+                <div id="pf-stock-section">
+                <!-- 添加股票 -->
+                <div class="card mb-3">
+                    <div class="card-header"><i class="fas fa-plus-circle"></i> 添加股票</div>
+                    <div class="card-body">
+                        <div class="pf-intro">
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-bolt"></i></span>
+                                <span>只需填写<strong>股票代码</strong>、<strong>购买日期</strong>和<strong>数量</strong>，系统自动查询股票名称和当日买入价。</span>
+                            </div>
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-hashtag"></i></span>
+                                <span><strong>股票代码</strong>：6位数字，如 600036（招商银行）、000858（五粮液）。美股填字母如 AAPL。</span>
+                            </div>
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-calendar"></i></span>
+                                <span><strong>购买日期</strong>：选择实际买入的日期，系统自动获取当天收盘价作为成本价。</span>
+                            </div>
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-cubes"></i></span>
+                                <span><strong>持仓数量</strong>：您实际持有的总股数。A股最低1手（100股），美股不限。</span>
+                            </div>
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-magic"></i></span>
+                                <span>点击"自动查询"后，名称、成本价、市场会自动填充。确认无误后点击"添加股票"即可。</span>
+                            </div>
+                        </div>
+                        <div class="param-group">
+                            <label>股票代码 <span style="color:var(--red);">*</span></label>
+                            <input type="text" class="form-control" id="pf-stock-code" placeholder="如 600036">
+                            <small class="pf-hint">沪市60开头、深市000/002/300开头，美股填字母代码</small>
+                        </div>
+                        <div class="param-group">
+                            <label>购买日期 <span style="color:var(--red);">*</span></label>
+                            <input type="date" class="form-control" id="pf-stock-date">
+                            <small class="pf-hint">选择实际买入日期，系统自动获取当天收盘价</small>
+                        </div>
+                        <div class="param-group">
+                            <label>持仓数量（股） <span style="color:var(--red);">*</span></label>
+                            <input type="number" class="form-control" id="pf-stock-qty" placeholder="如 1000" step="100">
+                            <small class="pf-hint">当前实际持有的总股数</small>
+                        </div>
+                        <button class="btn btn-info w-100 mb-2" onclick="lookupPortfolioStock()" id="pf-stock-lookup-btn">
+                            <i class="fas fa-search"></i> 自动查询
+                        </button>
+                        <div id="pf-stock-lookup-result" style="display:none;">
+                            <div class="pf-lookup-box">
+                                <div class="pf-lookup-row">
+                                    <span class="pf-lookup-label">股票名称</span>
+                                    <input type="text" class="form-control form-control-sm" id="pf-stock-name" placeholder="自动填充">
+                                </div>
+                                <div class="pf-lookup-row">
+                                    <span class="pf-lookup-label">成本价（元）</span>
+                                    <input type="number" class="form-control form-control-sm" id="pf-stock-cost" step="0.01" placeholder="自动填充">
+                                    <small class="pf-hint">默认取购买日收盘价，可手动修改为实际买入均价</small>
+                                </div>
+                                <div class="pf-lookup-row">
+                                    <span class="pf-lookup-label">市场</span>
+                                    <select class="form-select form-select-sm" id="pf-stock-market">
+                                        <option value="A_SHARE">A股</option>
+                                        <option value="US">美股</option>
+                                    </select>
+                                </div>
+                                <div class="pf-lookup-row">
+                                    <span class="pf-lookup-label">备注</span>
+                                    <input type="text" class="form-control form-control-sm" id="pf-stock-notes" placeholder="选填，如买入理由">
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary w-100 mt-2" onclick="addPortfolioStock()">
+                            <i class="fas fa-plus"></i> 添加股票
+                        </button>
+                    </div>
+                </div>
+                </div><!-- /pf-stock-section -->
+                <!-- 基金持仓区域 -->
+                <div id="pf-fund-section">
+                <!-- 添加基金 -->
+                <div class="card mb-3">
+                    <div class="card-header"><i class="fas fa-plus-circle"></i> 添加基金</div>
+                    <div class="card-body">
+                        <div class="pf-intro">
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-bolt"></i></span>
+                                <span>只需填写<strong>基金代码</strong>、<strong>购买日期</strong>和<strong>份额</strong>，系统自动查询基金名称和当日净值。</span>
+                            </div>
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-hashtag"></i></span>
+                                <span><strong>基金代码</strong>：6位数字，如 000001（华夏成长）、005827（易方达蓝筹）。可在支付宝搜索查看。</span>
+                            </div>
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-calendar"></i></span>
+                                <span><strong>购买日期</strong>：选择实际买入的日期，系统自动获取当天基金净值作为成本价。</span>
+                            </div>
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-layer-group"></i></span>
+                                <span><strong>持有份额</strong>：您实际持有的基金总份额。可在基金App的"持有份额"栏查看。</span>
+                            </div>
+                            <div class="pf-intro-item">
+                                <span class="pf-intro-icon"><i class="fas fa-magic"></i></span>
+                                <span>点击"自动查询"后，名称和成本净值会自动填充。确认无误后点击"添加基金"即可。</span>
+                            </div>
+                        </div>
+                        <div class="param-group">
+                            <label>基金代码 <span style="color:var(--red);">*</span></label>
+                            <input type="text" class="form-control" id="pf-fund-code" placeholder="如 000001">
+                            <small class="pf-hint">6位数字代码，可在天天基金网、支付宝或银行App中搜索</small>
+                        </div>
+                        <div class="param-group">
+                            <label>购买日期 <span style="color:var(--red);">*</span></label>
+                            <input type="date" class="form-control" id="pf-fund-date">
+                            <small class="pf-hint">选择实际买入日期，系统自动获取当天基金净值</small>
+                        </div>
+                        <div class="param-group">
+                            <label>持有份额 <span style="color:var(--red);">*</span></label>
+                            <input type="number" class="form-control" id="pf-fund-shares" placeholder="如 10000" step="100">
+                            <small class="pf-hint">当前实际持有的基金总份额</small>
+                        </div>
+                        <button class="btn btn-info w-100 mb-2" onclick="lookupPortfolioFund()" id="pf-fund-lookup-btn">
+                            <i class="fas fa-search"></i> 自动查询
+                        </button>
+                        <div id="pf-fund-lookup-result" style="display:none;">
+                            <div class="pf-lookup-box">
+                                <div class="pf-lookup-row">
+                                    <span class="pf-lookup-label">基金名称</span>
+                                    <input type="text" class="form-control form-control-sm" id="pf-fund-name" placeholder="自动填充">
+                                </div>
+                                <div class="pf-lookup-row">
+                                    <span class="pf-lookup-label">成本净值（元）</span>
+                                    <input type="number" class="form-control form-control-sm" id="pf-fund-nav" step="0.0001" placeholder="自动填充">
+                                    <small class="pf-hint">默认取购买日净值，可手动修改为实际买入均价</small>
+                                </div>
+                                <div class="pf-lookup-row">
+                                    <span class="pf-lookup-label">备注</span>
+                                    <input type="text" class="form-control form-control-sm" id="pf-fund-notes" placeholder="选填，如定投计划">
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary w-100 mt-2" onclick="addPortfolioFund()">
+                            <i class="fas fa-plus"></i> 添加基金
+                        </button>
+                    </div>
+                </div>
+                </div><!-- /pf-fund-section -->
+                <!-- 持仓概况 -->
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-info-circle"></i> 持仓概况</div>
+                    <div class="card-body" id="pf-summary-side" style="font-size:0.85rem;">
+                        <div class="text-muted">暂无持仓数据</div>
+                    </div>
+                </div>
+            </div>
+            <!-- 右侧内容区域 -->
+            <div class="col-lg-9">
+                <!-- 汇总指标卡 -->
+                <div class="row mb-3" id="pf-summary-cards">
+                    <div class="col-md-3">
+                        <div class="metric-card" title="所有持仓按当前价格/估值计算的总市场价值">
+                            <div class="metric-label">总市值 <i class="fas fa-question-circle" style="font-size:0.7rem;opacity:0.5;"></i></div>
+                            <div class="metric-value" id="pf-total-value">--</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card" title="所有持仓的买入总花费（股票数量×成本价 + 基金份额×成本净值）">
+                            <div class="metric-label">总成本 <i class="fas fa-question-circle" style="font-size:0.7rem;opacity:0.5;"></i></div>
+                            <div class="metric-value" id="pf-total-cost">--</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card" title="总市值与总成本的差额，即当前盈亏金额和百分比">
+                            <div class="metric-label">总浮动盈亏 <i class="fas fa-question-circle" style="font-size:0.7rem;opacity:0.5;"></i></div>
+                            <div class="metric-value" id="pf-total-pnl">--</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card" title="今日所有持仓的涨跌金额合计（股票：数量×今日涨跌；基金：份额×今日估值变动）">
+                            <div class="metric-label">今日盈亏 <i class="fas fa-question-circle" style="font-size:0.7rem;opacity:0.5;"></i></div>
+                            <div class="metric-value" id="pf-today-pnl">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 实时刷新控制 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-sync-alt"></i> 实时涨跌监控</span>
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <label style="font-size:0.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                                <input type="checkbox" id="pf-rt-auto" onchange="togglePortfolioAuto()"> 自动刷新
+                            </label>
+                            <button class="btn btn-sm btn-outline-info" onclick="refreshPortfolio()">
+                                <i class="fas fa-sync-alt"></i> 刷新
+                            </button>
+                            <span style="font-size:0.75rem;color:var(--text-secondary);" id="pf-rt-timer">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pf-stock-right">
+                <!-- 股票持仓表 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-chart-bar"></i> 股票持仓 (<span id="pf-stock-count">0</span>只)</span>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);" id="pf-stock-summary-line">--</span>
+                    </div>
+                    <div class="card-body p-0" style="overflow-x:auto;">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th title="股票代码，点击可打开K线图">代码</th>
+                                    <th title="股票简称">名称</th>
+                                    <th title="当前持有的总股数">数量</th>
+                                    <th title="买入均价（含手续费），可在行内编辑修改">成本价</th>
+                                    <th title="实时行情价格，交易时段自动刷新">现价</th>
+                                    <th title="今日相对于昨收的涨跌幅">今日涨跌%</th>
+                                    <th title="(现价-成本价)/成本价×100%">浮动盈亏%</th>
+                                    <th title="(现价-成本价)×持仓数量">浮动盈亏</th>
+                                    <th title="(现价-昨收)×持仓数量，即今日涨跌带来的盈亏金额">今日盈亏</th>
+                                    <th title="编辑可修改数量和成本价，删除将移除该持仓">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pf-stock-tbody">
+                                <tr><td colspan="10" class="text-center text-muted">暂无股票持仓，请在左侧添加</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </div><!-- /pf-stock-right -->
+
+                <div id="pf-fund-right">
+                <!-- 基金持仓表 -->
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span><i class="fas fa-gem"></i> 基金持仓 (<span id="pf-fund-count">0</span>只)</span>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);" id="pf-fund-summary-line">--</span>
+                    </div>
+                    <div class="card-body p-0" style="overflow-x:auto;">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th title="基金代码，点击可打开基金详情弹窗">代码</th>
+                                    <th title="基金简称">名称</th>
+                                    <th title="当前持有的基金份额总数">份额</th>
+                                    <th title="买入时的平均单位净值，可在行内编辑修改">成本净值</th>
+                                    <th title="天天基金实时估值，盘中自动更新">实时估值</th>
+                                    <th title="今日估算涨跌幅（相对昨日净值）">今日涨跌%</th>
+                                    <th title="(实时估值-成本净值)/成本净值×100%">浮动盈亏%</th>
+                                    <th title="(实时估值-成本净值)×持有份额">浮动盈亏</th>
+                                    <th title="(实时估值-昨日净值)×持有份额，即今日预估盈亏">今日盈亏</th>
+                                    <th title="编辑可修改份额和成本净值，删除将移除该持仓">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pf-fund-tbody">
+                                <tr><td colspan="10" class="text-center text-muted">暂无基金持仓，请在左侧添加</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </div><!-- /pf-fund-right -->
+            </div>
+        </div>
+    </div>
+</div>
 <div class="loading-overlay" id="loading">
     <div class="text-center">
         <div class="spinner mx-auto mb-3"></div>
@@ -1388,8 +2205,80 @@
     </div>
 </div>
 
+<!-- 基金详情弹窗 -->
+<div class="kline-overlay" id="fund-detail-overlay" onclick="if(event.target===this)closeFundDetail()">
+    <div class="kline-modal" style="max-width:900px;">
+        <div class="kline-header">
+            <h5 id="fd-title"><i class="fas fa-gem"></i> 基金详情</h5>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span id="fd-nav" style="font-size:1.1rem;font-weight:700;"></span>
+                <span id="fd-change" style="font-size:0.85rem;"></span>
+                <button class="kline-close" onclick="closeFundDetail()">&times;</button>
+            </div>
+        </div>
+        <div class="kline-body" style="padding:1rem 1.2rem;">
+            <!-- 基本信息 -->
+            <div style="display:flex;gap:16px;margin-bottom:1rem;font-size:0.82rem;flex-wrap:wrap;">
+                <span style="color:var(--text-secondary);">代码: <strong id="fd-code" style="color:var(--accent);"></strong></span>
+                <span style="color:var(--text-secondary);">名称: <strong id="fd-name" style="color:var(--text-primary);"></strong></span>
+                <span style="color:var(--text-secondary);">日期: <strong id="fd-date" style="color:var(--text-primary);"></strong></span>
+                <span style="color:var(--text-secondary);">成立: <strong id="fd-inception" style="color:var(--text-primary);"></strong></span>
+            </div>
+            <!-- 收益指标 -->
+            <div class="fund-detail-metrics" id="fd-metrics"></div>
+            <!-- 净值走势图 -->
+            <div class="card mb-2">
+                <div class="card-header" style="font-size:0.9rem;"><i class="fas fa-chart-area"></i> 近180天净值走势</div>
+                <div class="card-body p-2"><div id="fd-nav-chart" style="min-height:320px;"></div></div>
+            </div>
+            <!-- 实时估值 -->
+            <div class="card">
+                <div class="card-header" style="font-size:0.9rem;"><i class="fas fa-clock"></i> 实时估值</div>
+                <div class="card-body" id="fd-realtime" style="font-size:0.85rem;">
+                    <span style="color:var(--text-secondary);">加载中...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script>
+// ==================== 认证工具 ====================
+// 全局 fetch 包装器：自动处理 401 跳转登录
+const _origFetch = window.fetch;
+window.fetch = async function(...args) {
+    const resp = await _origFetch.apply(this, args);
+    if (resp.status === 401) {
+        // API 返回 401 未授权 → 跳转登录页
+        window.location.href = '/auth/login';
+        return resp;
+    }
+    return resp;
+};
+
+// 加载当前用户信息到导航栏
+async function loadUserStatus() {
+    try {
+        const resp = await _origFetch('/auth/me');
+        if (!resp.ok) {
+            window.location.href = '/auth/login';
+            return;
+        }
+        const data = await resp.json();
+        if (data.username) {
+            document.getElementById('user-display').innerHTML =
+                '<i class="fas fa-user-circle"></i> ' + data.username;
+            document.getElementById('user-logout-btn').style.display = 'inline';
+        } else {
+            window.location.href = '/auth/login';
+        }
+    } catch (e) {
+        window.location.href = '/auth/login';
+    }
+}
+loadUserStatus();
+
 // ==================== 图表配置 ====================
 const chartLayout = {
     paper_bgcolor: '#1e2a3a',
@@ -2604,6 +3493,46 @@ function updateDailyUI(data) {
     }
 }
 
+// ==================== 股票模式 / 基金模式 切换 ====================
+let currentMode = 'stock';
+
+function switchMode(mode) {
+    currentMode = mode;
+    // 1. 更新模式按钮高亮
+    document.querySelectorAll('#mode-toggle-group .market-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    // 2. 显示/隐藏 A股/美股 市场切换（基金模式隐藏）
+    const mktToggle = document.getElementById('global-market-toggle');
+    const mktLabel = document.getElementById('market-label');
+    if (mktToggle) mktToggle.style.display = (mode === 'stock') ? '' : 'none';
+    if (mktLabel) mktLabel.style.display = (mode === 'stock') ? '' : 'none';
+    const mktSep = document.getElementById('market-separator');
+    if (mktSep) mktSep.style.display = (mode === 'stock') ? '' : 'none';
+    // 3. 过滤 Tab 标签显示
+    document.querySelectorAll('#mainTabs > .nav-item').forEach(li => {
+        const m = li.dataset.mode;
+        li.style.display = (m === mode || m === 'both') ? '' : 'none';
+    });
+    // 4. 自动激活当前模式的第一个可见 Tab
+    const firstVisible = document.querySelector('#mainTabs > .nav-item[data-mode="' + mode + '"] .nav-link')
+        || document.querySelector('#mainTabs > .nav-item[data-mode="both"] .nav-link');
+    if (firstVisible) {
+        const tab = new bootstrap.Tab(firstVisible);
+        tab.show();
+    }
+    // 5. 持仓面板：按模式显隐股票/基金区域
+    const pfStockSections = [document.getElementById('pf-stock-section'), document.getElementById('pf-stock-right')];
+    const pfFundSections = [document.getElementById('pf-fund-section'), document.getElementById('pf-fund-right')];
+    pfStockSections.forEach(el => { if (el) el.style.display = (mode === 'stock' || mode === 'both') ? '' : 'none'; });
+    pfFundSections.forEach(el => { if (el) el.style.display = (mode === 'fund' || mode === 'both') ? '' : 'none'; });
+}
+
+// 页面加载时默认进入股票模式
+document.addEventListener('DOMContentLoaded', () => {
+    switchMode('stock');
+});
+
 // ==================== 全局跨板块自动刷新 ====================
 let _globalTradeActive = false;
 let _globalRefreshTimer = null;
@@ -2612,9 +3541,18 @@ let _globalRefreshTimer = null;
 document.querySelectorAll('.nav-tabs .nav-link').forEach(link => {
     link.addEventListener('shown.bs.tab', (e) => {
         const target = e.target.getAttribute('href');
+        // 离开基金大盘时停止实时刷新
+        if (target !== '#tab-fund-overview' && _foRtTimer) {
+            clearInterval(_foRtTimer); _foRtTimer = null;
+            const cb = document.getElementById('fo-rt-auto');
+            if (cb) cb.checked = false;
+        }
         if (target === '#tab-daily') refreshDailyStatus();
         if (target === '#tab-smart') refreshSmartStatus();
         if (target === '#tab-paper') refreshPaperStatus();
+        if (target === '#tab-fund-overview') { loadFundOverview(); setTimeout(loadFundOverviewRealtime, 2000); }
+        if (target === '#tab-fund-dynamics') { loadFundRanking(); setTimeout(refreshFundRealtime, 2000); }
+        if (target === '#tab-portfolio') { refreshPortfolio(); }
     });
 });
 
@@ -3057,7 +3995,1016 @@ function _linkCharts() {
 }
 
 // ESC 关闭弹窗
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeKline(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeKline(); closeFundDetail(); } });
+
+// ==================== 基金大盘 ====================
+let _fundOverviewLoaded = false;
+
+async function loadFundOverview() {
+    _fundOverviewLoaded = true;
+    // 加载概览数据
+    try {
+        const res = await fetch('/api/fund/overview');
+        const data = await res.json();
+        if (data.error) { console.warn('基金概览错误:', data.error); return; }
+
+        // 指标卡片 - 从规模趋势推算
+        const trend = data.scale_trend || {};
+        const typeStats = data.type_stats || [];
+        const values = trend.values || [];
+        const dates = trend.dates || [];
+        const latestScale = values.length > 0 ? values[values.length - 1] : 0;
+        // 后端返回的是原始数值(元), 转换为万亿
+        document.getElementById('fo-total-scale').textContent = latestScale ? (latestScale / 1e12).toFixed(2) + '万亿' : '--';
+
+        // 基金总数从类型统计汇总
+        const totalCount = typeStats.reduce((s, t) => s + (t.count || 0), 0);
+        document.getElementById('fo-total-count').textContent = totalCount ? totalCount.toLocaleString() : '--';
+
+        // 规模趋势图
+        if (dates.length > 0 && values.length > 0) {
+            // 转换为亿
+            const valuesInYi = values.map(v => v / 1e8);
+            Plotly.newPlot('fund-scale-chart', [{
+                x: dates,
+                y: valuesInYi,
+                type: 'scatter',
+                mode: 'lines',
+                fill: 'tozeroy',
+                fillcolor: 'rgba(79,172,254,0.1)',
+                line: { color: '#4facfe', width: 2 },
+                name: '总规模(亿)',
+            }], {
+                ...chartLayout,
+                yaxis: { ...chartLayout.yaxis, title: '规模(亿元)' },
+            }, chartConfig);
+        }
+
+        // 类型分布饼图
+        if (typeStats.length > 0) {
+            Plotly.newPlot('fund-type-chart', [{
+                labels: typeStats.map(d => d.type),
+                values: typeStats.map(d => d.count || 1),
+                type: 'pie',
+                hole: 0.4,
+                marker: { colors: ['#4facfe','#00d68f','#ffaa00','#ff4d6a','#00f2fe','#a855f7','#f97316'] },
+                textinfo: 'label+percent',
+                textfont: { size: 12 },
+            }], {
+                ...chartLayout,
+                margin: { l: 20, r: 20, t: 20, b: 20 },
+                showlegend: false,
+            }, chartConfig);
+        }
+    } catch (e) {
+        console.warn('基金概览加载失败:', e);
+    }
+
+    // 加载基金公司排名
+    try {
+        const res = await fetch('/api/fund/companies');
+        const data = await res.json();
+        const companies = data.companies || [];
+        const tbody = document.getElementById('fund-company-tbody');
+        if (companies.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">暂无数据</td></tr>';
+            return;
+        }
+        tbody.innerHTML = companies.map((c, i) => `<tr>
+            <td>${i + 1}</td>
+            <td>${c.name || '--'}</td>
+            <td>${c.aum ? c.aum.toFixed(0) : '--'}</td>
+            <td>${c.fund_count || '--'}</td>
+        </tr>`).join('');
+    } catch (e) {
+        console.warn('基金公司排名加载失败:', e);
+    }
+}
+
+// ==================== 基金大盘 - 实时行情 ====================
+let _foRtTimer = null;
+let _foRtInterval = 30000; // 30秒刷新
+let _foRtData = [];   // 缓存最近一次实时数据
+let _foRtFilter = 'all'; // 当前筛选: 'all' | 'up' | 'down'
+
+function _renderFoRtTable(filter) {
+    _foRtFilter = filter;
+    const tbody = document.getElementById('fo-rt-tbody');
+    // 更新卡片高亮
+    document.querySelectorAll('.fo-filter-card').forEach(c => c.classList.remove('active'));
+    const activeCard = document.getElementById('fo-card-' + filter);
+    if (activeCard) activeCard.classList.add('active');
+
+    if (!_foRtData || _foRtData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">暂无数据，请先刷新</td></tr>';
+        return;
+    }
+
+    let filtered = _foRtData;
+    let label = '全部';
+    if (filter === 'up') {
+        filtered = _foRtData.filter(f => (f.estimated_change || 0) > 0);
+        label = '上涨';
+    } else if (filter === 'down') {
+        filtered = _foRtData.filter(f => (f.estimated_change || 0) < 0);
+        label = '下跌';
+    }
+
+    // 更新表头标题
+    const summaryLine = document.getElementById('fo-rt-summary-line');
+    if (summaryLine) {
+        const upC = _foRtData.filter(f => (f.estimated_change || 0) > 0).length;
+        const dnC = _foRtData.filter(f => (f.estimated_change || 0) < 0).length;
+        summaryLine.textContent = filter === 'all'
+            ? `共${_foRtData.length}只 · 涨${upC} 跌${dnC}`
+            : `${label}基金 ${filtered.length}只（共${_foRtData.length}只）`;
+    }
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">暂无${label}基金</td></tr>`;
+        return;
+    }
+
+    // 按估值涨跌排序
+    filtered.sort((a, b) => (b.estimated_change || 0) - (a.estimated_change || 0));
+
+    tbody.innerHTML = filtered.map((f, i) => {
+        const chg = f.estimated_change || 0;
+        const chgColor = _pctColor(chg);
+        const navColor = f.estimated_nav > f.nav ? 'var(--green)' : f.estimated_nav < f.nav ? 'var(--red)' : 'var(--text-primary)';
+        return `<tr>
+            <td>${i + 1}</td>
+            <td><a class="fund-code-link" onclick="openFundDetail('${f.code}')">${f.code}</a></td>
+            <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.name || '--'}">${f.name || '--'}</td>
+            <td>${f.nav ? f.nav.toFixed(4) : '--'}</td>
+            <td style="color:${navColor};font-weight:600;">${f.estimated_nav ? f.estimated_nav.toFixed(4) : '--'}</td>
+            <td style="color:${chgColor};font-weight:700;font-size:0.95rem;">${_pctStr(chg)}</td>
+            <td style="font-size:0.75rem;color:var(--text-secondary);">${f.update_time || '--'}</td>
+        </tr>`;
+    }).join('');
+}
+
+function filterFoRtTable(filter) {
+    if (_foRtFilter === filter && filter !== 'all') {
+        // 再次点击同一个卡片，重置为全部
+        _renderFoRtTable('all');
+    } else {
+        _renderFoRtTable(filter);
+    }
+}
+
+async function loadFundOverviewRealtime() {
+    const timerEl = document.getElementById('fo-rt-timer');
+    timerEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 刷新中...';
+
+    try {
+        // 1. 获取今日排行 TOP30 基金代码
+        const rankRes = await fetch('/api/fund/ranking?type=all&sort=rzdf&top=30');
+        const rankData = await rankRes.json();
+        const funds = rankData.funds || [];
+        if (funds.length === 0) {
+            document.getElementById('fo-rt-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-muted">暂无排行数据</td></tr>';
+            timerEl.innerHTML = '<i class="fas fa-clock"></i> --';
+            return;
+        }
+        const codes = funds.map(f => f.code);
+
+        // 2. 批量获取实时估值
+        const rtRes = await fetch(`/api/fund/realtime_batch?codes=${codes.join(',')}`);
+        const rtData = await rtRes.json();
+        const rtFunds = rtData.funds || [];
+
+        const now = new Date();
+        timerEl.innerHTML = `<i class="fas fa-clock"></i> ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+
+        if (rtFunds.length === 0) {
+            document.getElementById('fo-rt-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-muted">暂无实时估值数据</td></tr>';
+            return;
+        }
+
+        // 3. 缓存数据
+        _foRtData = rtFunds;
+
+        // 4. 计算情绪指标
+        let upCount = 0, downCount = 0, totalChange = 0;
+        rtFunds.forEach(f => {
+            const chg = f.estimated_change || 0;
+            if (chg > 0) upCount++;
+            else if (chg < 0) downCount++;
+            totalChange += chg;
+        });
+        const avgChange = totalChange / rtFunds.length;
+
+        document.getElementById('fo-rt-all-count').textContent = rtFunds.length;
+        document.getElementById('fo-rt-up-count').textContent = upCount;
+        document.getElementById('fo-rt-down-count').textContent = downCount;
+        const avgEl = document.getElementById('fo-rt-avg-change');
+        avgEl.textContent = _pctStr(avgChange);
+        avgEl.style.color = _pctColor(avgChange);
+
+        // 5. 按当前筛选条件渲染表格（保持用户的筛选选择）
+        _renderFoRtTable(_foRtFilter);
+    } catch (e) {
+        timerEl.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:var(--red);"></i> 刷新失败';
+        console.warn('基金大盘实时行情加载失败:', e);
+    }
+}
+
+function toggleFundOverviewRealtime() {
+    const checked = document.getElementById('fo-rt-auto').checked;
+    if (checked) {
+        loadFundOverviewRealtime(); // 立即刷新一次
+        if (_foRtTimer) clearInterval(_foRtTimer);
+        _foRtTimer = setInterval(loadFundOverviewRealtime, _foRtInterval);
+    } else {
+        if (_foRtTimer) { clearInterval(_foRtTimer); _foRtTimer = null; }
+    }
+}
+
+// ==================== 基金动态 ====================
+let _fundRankData = [];
+
+function _pctColor(val) {
+    if (val == null || isNaN(val)) return 'var(--text-secondary)';
+    return val > 0 ? 'var(--green)' : val < 0 ? 'var(--red)' : 'var(--text-primary)';
+}
+function _pctStr(val) {
+    if (val == null || isNaN(val)) return '--';
+    return (val > 0 ? '+' : '') + val.toFixed(2) + '%';
+}
+
+async function loadFundRanking() {
+    const type = document.getElementById('fund-rank-type').value;
+    const sort = document.getElementById('fund-rank-sort').value;
+    const top = document.getElementById('fund-rank-top').value;
+    document.getElementById('fund-rank-info').textContent = '加载中...';
+
+    try {
+        const res = await fetch(`/api/fund/ranking?type=${type}&sort=${sort}&top=${top}`);
+        const data = await res.json();
+        const funds = data.funds || [];
+        _fundRankData = funds;
+        document.getElementById('fund-rank-info').textContent = `共 ${funds.length} 只基金`;
+
+        const tbody = document.getElementById('fund-rank-tbody');
+        if (funds.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">暂无数据</td></tr>';
+            return;
+        }
+        tbody.innerHTML = funds.map((f, i) => {
+            const chgColor = _pctColor(f.daily_change);
+            const r1w = f['1w'], r1m = f['1m'], r3m = f['3m'], r6m = f['6m'];
+            const r1y = f['1y'], r2y = f['2y'], r3y = f['3y'], rytd = f.ytd;
+            const escapedName = (f.name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+            return `<tr>
+                <td>${i + 1}</td>
+                <td><a class="fund-code-link" onclick="openFundDetail('${f.code}')">${f.code}</a></td>
+                <td onclick="showFundNav('${f.code}','${escapedName}')" style="cursor:pointer;">${f.name || '--'}</td>
+                <td>${f.nav != null ? f.nav.toFixed(4) : '--'}</td>
+                <td style="color:${chgColor};font-weight:600;">${_pctStr(f.daily_change)}</td>
+                <td style="color:${_pctColor(r1w)};">${_pctStr(r1w)}</td>
+                <td style="color:${_pctColor(r1m)};">${_pctStr(r1m)}</td>
+                <td style="color:${_pctColor(r3m)};">${_pctStr(r3m)}</td>
+                <td style="color:${_pctColor(r6m)};">${_pctStr(r6m)}</td>
+                <td style="color:${_pctColor(r1y)};">${_pctStr(r1y)}</td>
+                <td style="color:${_pctColor(r2y)};">${_pctStr(r2y)}</td>
+                <td style="color:${_pctColor(r3y)};">${_pctStr(r3y)}</td>
+                <td style="color:${_pctColor(rytd)};">${_pctStr(rytd)}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        document.getElementById('fund-rank-info').textContent = '加载失败';
+        console.warn('基金排行加载失败:', e);
+    }
+}
+
+async function loadFundRealtime() {
+    const code = document.getElementById('fund-realtime-code').value.trim();
+    if (!code) return;
+
+    try {
+        const res = await fetch(`/api/fund/realtime?code=${code}`);
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+
+        document.getElementById('fund-realtime-card').style.display = 'block';
+        document.getElementById('fr-name').textContent = data.name || code;
+        document.getElementById('fr-nav').textContent = data.nav != null ? data.nav.toFixed(4) : '--';
+
+        const estNavEl = document.getElementById('fr-est-nav');
+        estNavEl.textContent = data.estimated_nav != null ? data.estimated_nav.toFixed(4) : '--';
+        const estChgEl = document.getElementById('fr-est-change');
+        if (data.estimated_change != null) {
+            estChgEl.textContent = _pctStr(data.estimated_change);
+            estChgEl.style.color = _pctColor(data.estimated_change);
+        } else {
+            estChgEl.textContent = '--';
+        }
+        document.getElementById('fr-time').textContent = data.update_time || '--';
+    } catch (e) {
+        alert('基金实时估值加载失败');
+    }
+}
+
+async function showFundNav(code, name) {
+    document.getElementById('fund-nav-title').textContent = `${name} (${code}) 近90天`;
+    try {
+        const res = await fetch(`/api/fund/nav_history?code=${code}&days=90`);
+        const data = await res.json();
+        const history = data.nav_history || [];
+        if (history.length === 0) {
+            document.getElementById('fund-nav-title').textContent = `${name} (${code}) 无数据`;
+            return;
+        }
+        const dates = history.map(h => h.date);
+        const navs = history.map(h => h.nav);
+        const cumNavs = history.map(h => h.cumulative_nav || h.nav);
+
+        Plotly.newPlot('fund-nav-chart', [
+            {
+                x: dates, y: navs, type: 'scatter', mode: 'lines',
+                name: '单位净值', line: { color: '#4facfe', width: 2 },
+            },
+            {
+                x: dates, y: cumNavs, type: 'scatter', mode: 'lines',
+                name: '累计净值', line: { color: '#00d68f', width: 1.5, dash: 'dot' },
+                yaxis: 'y2',
+            }
+        ], {
+            ...chartLayout,
+            yaxis: { ...chartLayout.yaxis, title: '单位净值' },
+            yaxis2: { title: '累计净值', overlaying: 'y', side: 'right', gridcolor: '#2a3a4a', linecolor: '#2a3a4a', color: '#8899aa' },
+            legend: { ...chartLayout.legend, x: 0.01, y: 0.99 },
+        }, chartConfig);
+    } catch (e) {
+        document.getElementById('fund-nav-title').textContent = '加载失败';
+        console.warn('净值走势加载失败:', e);
+    }
+}
+
+// ==================== 实时涨跌监控 ====================
+let _fundRtTimer = null;
+let _fundRtInterval = 15000; // 15秒刷新
+
+async function refreshFundRealtime() {
+    const count = parseInt(document.getElementById('fund-rt-count').value) || 20;
+    const tbody = document.getElementById('fund-rt-tbody');
+    const timerEl = document.getElementById('fund-rt-timer');
+    timerEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 刷新中...';
+
+    // 从排行数据取基金代码；如果排行未加载，先加载排行
+    if (!_fundRankData || _fundRankData.length === 0) {
+        await loadFundRanking();
+    }
+    const codes = _fundRankData.slice(0, count).map(f => f.code);
+    if (codes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">无数据，请先加载排行</td></tr>';
+        timerEl.innerHTML = '<i class="fas fa-clock"></i> --';
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/fund/realtime_batch?codes=${codes.join(',')}`);
+        const data = await res.json();
+        const funds = data.funds || [];
+        const now = new Date();
+        timerEl.innerHTML = `<i class="fas fa-clock"></i> ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+
+        if (funds.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">暂无估值数据</td></tr>';
+            return;
+        }
+
+        // 按估算涨跌排序（涨的在前）
+        funds.sort((a, b) => (b.estimated_change || 0) - (a.estimated_change || 0));
+
+        tbody.innerHTML = funds.map((f, i) => {
+            const chg = f.estimated_change || 0;
+            const chgColor = _pctColor(chg);
+            const navColor = f.estimated_nav > f.nav ? 'var(--green)' : f.estimated_nav < f.nav ? 'var(--red)' : 'var(--text-primary)';
+            return `<tr>
+                <td>${i + 1}</td>
+                <td><a class="fund-code-link" onclick="openFundDetail('${f.code}')">${f.code}</a></td>
+                <td>${f.name || '--'}</td>
+                <td>${f.nav ? f.nav.toFixed(4) : '--'}</td>
+                <td style="color:${navColor};font-weight:600;">${f.estimated_nav ? f.estimated_nav.toFixed(4) : '--'}</td>
+                <td style="color:${chgColor};font-weight:700;font-size:0.95rem;">${_pctStr(chg)}</td>
+                <td style="font-size:0.75rem;color:var(--text-secondary);">${f.update_time || '--'}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        timerEl.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:var(--red);"></i> 刷新失败';
+        console.warn('实时涨跌刷新失败:', e);
+    }
+}
+
+function toggleFundRealtimeAuto() {
+    const checked = document.getElementById('fund-rt-auto').checked;
+    if (checked) {
+        if (_fundRtTimer) clearInterval(_fundRtTimer);
+        _fundRtTimer = setInterval(refreshFundRealtime, _fundRtInterval);
+    } else {
+        if (_fundRtTimer) { clearInterval(_fundRtTimer); _fundRtTimer = null; }
+    }
+}
+
+// ==================== 基金详情弹窗 ====================
+async function openFundDetail(code) {
+    document.getElementById('fund-detail-overlay').classList.add('active');
+    document.getElementById('fd-code').textContent = code;
+    document.getElementById('fd-name').textContent = '加载中...';
+    document.getElementById('fd-nav').textContent = '';
+    document.getElementById('fd-change').textContent = '';
+    document.getElementById('fd-date').textContent = '--';
+    document.getElementById('fd-inception').textContent = '--';
+    document.getElementById('fd-metrics').innerHTML = '';
+    document.getElementById('fd-realtime').innerHTML = '<span style="color:var(--text-secondary);">加载中...</span>';
+
+    // 从排行数据获取基本信息
+    const fund = _fundRankData.find(f => f.code === code);
+    if (fund) {
+        document.getElementById('fd-name').textContent = fund.name || '--';
+        document.getElementById('fd-nav').textContent = fund.nav ? fund.nav.toFixed(4) : '';
+        const chg = fund.daily_change;
+        const chgEl = document.getElementById('fd-change');
+        if (chg != null) {
+            chgEl.textContent = _pctStr(chg);
+            chgEl.style.color = _pctColor(chg);
+        }
+        document.getElementById('fd-date').textContent = fund.date || '--';
+        document.getElementById('fd-inception').textContent = fund.inception_date || '--';
+
+        // 收益指标网格
+        const metrics = [
+            { label: '日涨跌', val: fund.daily_change },
+            { label: '近1周', val: fund['1w'] },
+            { label: '近1月', val: fund['1m'] },
+            { label: '近3月', val: fund['3m'] },
+            { label: '近6月', val: fund['6m'] },
+            { label: '近1年', val: fund['1y'] },
+            { label: '近2年', val: fund['2y'] },
+            { label: '近3年', val: fund['3y'] },
+            { label: '今年来', val: fund.ytd },
+            { label: '成立以来', val: fund.inception },
+            { label: '累计净值', val: fund.cumulative_nav, isNav: true },
+            { label: '最大回撤', val: fund.max_drawdown, isMdd: true },
+        ];
+        document.getElementById('fd-metrics').innerHTML = metrics.map(m => {
+            let valStr, color;
+            if (m.isNav) {
+                valStr = m.val != null ? m.val.toFixed(4) : '--';
+                color = 'var(--accent)';
+            } else if (m.isMdd) {
+                valStr = m.val ? m.val.toFixed(2) + '%' : '--';
+                color = m.val ? 'var(--red)' : 'var(--text-secondary)';
+            } else {
+                valStr = _pctStr(m.val);
+                color = _pctColor(m.val);
+            }
+            return `<div class="fdm-item">
+                <div class="fdm-label">${m.label}</div>
+                <div class="fdm-value" style="color:${color};">${valStr}</div>
+            </div>`;
+        }).join('');
+    }
+
+    // 并行加载净值走势和实时估值
+    try {
+        const [navRes, rtRes] = await Promise.all([
+            fetch(`/api/fund/nav_history?code=${code}&days=180`),
+            fetch(`/api/fund/realtime?code=${code}`),
+        ]);
+        const navData = await navRes.json();
+        const rtData = await rtRes.json();
+
+        // 渲染净值走势
+        const history = navData.nav_history || [];
+        if (history.length > 0) {
+            const dates = history.map(h => h.date);
+            const navs = history.map(h => h.nav);
+            Plotly.newPlot('fd-nav-chart', [{
+                x: dates, y: navs, type: 'scatter', mode: 'lines',
+                fill: 'tozeroy', fillcolor: 'rgba(79,172,254,0.08)',
+                line: { color: '#4facfe', width: 2 }, name: '单位净值',
+            }], {
+                ...chartLayout,
+                yaxis: { ...chartLayout.yaxis, title: '单位净值' },
+                margin: { l: 50, r: 20, t: 20, b: 40 },
+            }, chartConfig);
+        }
+
+        // 渲染实时估值
+        const rtEl = document.getElementById('fd-realtime');
+        if (rtData.name && rtData.estimated_nav) {
+            const estColor = _pctColor(rtData.estimated_change);
+            rtEl.innerHTML = `
+                <div style="display:flex;gap:24px;flex-wrap:wrap;">
+                    <span>基金: <strong>${rtData.name}</strong></span>
+                    <span>上期净值: <strong>${rtData.nav ? rtData.nav.toFixed(4) : '--'}</strong></span>
+                    <span>估算净值: <strong style="color:${estColor};">${rtData.estimated_nav ? rtData.estimated_nav.toFixed(4) : '--'}</strong></span>
+                    <span>估算涨跌: <strong style="color:${estColor};">${_pctStr(rtData.estimated_change)}</strong></span>
+                    <span style="color:var(--text-secondary);">更新: ${rtData.update_time || '--'}</span>
+                </div>`;
+        } else {
+            rtEl.innerHTML = '<span style="color:var(--text-secondary);">暂无实时估值数据</span>';
+        }
+    } catch (e) {
+        console.warn('基金详情加载失败:', e);
+    }
+}
+
+function closeFundDetail() {
+    document.getElementById('fund-detail-overlay').classList.remove('active');
+}
+
+// ==================== 智能选基 ====================
+let _fundScreenData = [];
+let _fundCompareCache = {};
+
+async function runFundScreen() {
+    const params = {
+        fund_type: document.getElementById('fp-type').value,
+        sort_by: document.getElementById('fp-sort').value,
+        min_return_1y: parseFloat(document.getElementById('fp-min-return').value) || 0,
+        max_drawdown: parseFloat(document.getElementById('fp-max-drawdown').value) || 100,
+        min_scale: parseFloat(document.getElementById('fp-min-scale').value) || 0,
+        page: 1,
+        size: parseInt(document.getElementById('fp-top-n').value) || 10,
+    };
+
+    document.getElementById('fp-result-info').textContent = '筛选中...';
+    try {
+        const res = await fetch('/api/fund/screen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params),
+        });
+        const data = await res.json();
+        const funds = data.funds || [];
+        _fundScreenData = funds;
+        document.getElementById('fp-result-info').textContent = `筛选出 ${data.total || funds.length} 只基金`;
+
+        const tbody = document.getElementById('fp-result-tbody');
+        if (funds.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">无符合条件的基金</td></tr>';
+            document.getElementById('fp-recommend-tbody').innerHTML = '<tr><td colspan="4" class="text-center text-muted">无推荐</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = funds.map(f => {
+            const typeMap = { gp: '股票型', hh: '混合型', zq: '债券型', zs: '指数型', qdii: 'QDII', fof: 'FOF' };
+            const r1m = f['1m'], r3m = f['3m'], r1y = f['1y'], rytd = f.ytd;
+            const mdd = f.max_drawdown;
+            return `<tr>
+                <td><input type="checkbox" class="fp-check" value="${f.code}"></td>
+                <td style="font-family:monospace;">${f.code}</td>
+                <td>${f.name || '--'}</td>
+                <td>${typeMap[f.type] || '--'}</td>
+                <td style="color:${_pctColor(r1m)};">${_pctStr(r1m)}</td>
+                <td style="color:${_pctColor(r3m)};">${_pctStr(r3m)}</td>
+                <td style="color:${_pctColor(r1y)};">${_pctStr(r1y)}</td>
+                <td style="color:${_pctColor(rytd)};">${_pctStr(rytd)}</td>
+                <td style="color:${mdd ? 'var(--red)' : 'var(--text-secondary)'};">${mdd ? mdd.toFixed(2) + '%' : '--'}</td>
+                <td>${f.scale != null ? f.scale.toFixed(2) : '--'}</td>
+            </tr>`;
+        }).join('');
+
+        // TOP推荐
+        const topN = Math.min(5, funds.length);
+        const recTbody = document.getElementById('fp-recommend-tbody');
+        recTbody.innerHTML = funds.slice(0, topN).map((f, i) => {
+            const r1y = f['1y'] || 0, r3m = f['3m'] || 0;
+            const mdd = f.max_drawdown || 0;
+            const reasons = [];
+            if (r1y > 20) reasons.push('高收益');
+            else if (r1y > 10) reasons.push('稳健收益');
+            if (mdd > 0 && mdd < 15) reasons.push('低回撤');
+            if (f.scale > 10) reasons.push('规模适中');
+            if (r3m > 5) reasons.push('近期强势');
+            return `<tr>
+                <td>${i + 1}</td>
+                <td>${f.name || f.code}</td>
+                <td style="color:${_pctColor(r1y)};">${_pctStr(r1y)}</td>
+                <td style="font-size:0.78rem;">${reasons.join('、') || '综合评分'}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        document.getElementById('fp-result-info').textContent = '筛选失败';
+        console.warn('基金筛选失败:', e);
+    }
+}
+
+function toggleFundCheckAll(el) {
+    document.querySelectorAll('.fp-check').forEach(cb => { cb.checked = el.checked; });
+}
+
+async function compareSelectedFunds() {
+    const checked = document.querySelectorAll('.fp-check:checked');
+    const codes = Array.from(checked).map(cb => cb.value);
+    if (codes.length < 2) { alert('请至少勾选2只基金进行对比'); return; }
+    if (codes.length > 4) { alert('最多对比4只基金'); return; }
+
+    const colors = ['#4facfe', '#00d68f', '#ffaa00', '#ff4d6a'];
+    const traces = [];
+
+    for (let i = 0; i < codes.length; i++) {
+        const code = codes[i];
+        const fund = _fundScreenData.find(f => f.code === code);
+        const name = fund ? fund.name : code;
+
+        try {
+            let history = _fundCompareCache[code];
+            if (!history) {
+                const res = await fetch(`/api/fund/nav_history?code=${code}&days=180`);
+                const data = await res.json();
+                history = data.nav_history || [];
+                _fundCompareCache[code] = history;
+            }
+            if (history.length === 0) continue;
+
+            // 归一化
+            const baseNav = history[0].nav;
+            const dates = history.map(h => h.date);
+            const normalized = history.map(h => ((h.nav / baseNav - 1) * 100));
+
+            traces.push({
+                x: dates, y: normalized, type: 'scatter', mode: 'lines',
+                name: `${name}(${code})`, line: { color: colors[i], width: 2 },
+            });
+        } catch (e) {
+            console.warn(`基金 ${code} 净值加载失败`);
+        }
+    }
+
+    if (traces.length > 0) {
+        Plotly.newPlot('fund-compare-chart', traces, {
+            ...chartLayout,
+            yaxis: { ...chartLayout.yaxis, title: '收益率(%)' },
+            legend: { ...chartLayout.legend, x: 0.01, y: 0.99 },
+        }, chartConfig);
+    }
+}
+
+// ==================== 我的持仓 ====================
+let _pfAutoTimer = null;
+const _pfAutoInterval = 15000; // 15秒
+
+function _fmtMoney(v) {
+    if (v == null || isNaN(v)) return '--';
+    const abs = Math.abs(v);
+    if (abs >= 1e8) return (v / 1e8).toFixed(2) + '亿';
+    if (abs >= 1e4) return (v / 1e4).toFixed(2) + '万';
+    return v.toFixed(2);
+}
+
+function _pnlClass(v) {
+    if (v > 0) return 'metric-positive';
+    if (v < 0) return 'metric-negative';
+    return 'metric-neutral';
+}
+
+function _pnlSign(v) {
+    if (v > 0) return '+';
+    return '';
+}
+
+async function refreshPortfolio() {
+    const timerEl = document.getElementById('pf-rt-timer');
+    timerEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 刷新中...';
+    try {
+        const res = await fetch('/api/portfolio/holdings');
+        const data = await res.json();
+        if (!data.success) {
+            timerEl.textContent = '加载失败';
+            return;
+        }
+        _renderPortfolio(data);
+        const now = new Date();
+        timerEl.textContent = `更新于 ${now.toLocaleTimeString()}`;
+    } catch (e) {
+        timerEl.textContent = '加载失败';
+        console.warn('持仓加载失败:', e);
+    }
+}
+
+function _renderPortfolio(data) {
+    const { stocks, funds, summary } = data;
+
+    // ---- 汇总卡片 ----
+    const tv = document.getElementById('pf-total-value');
+    tv.textContent = '¥' + _fmtMoney(summary.total_value);
+    tv.className = 'metric-value';
+
+    const tc = document.getElementById('pf-total-cost');
+    tc.textContent = '¥' + _fmtMoney(summary.total_cost);
+    tc.className = 'metric-value';
+
+    const tp = document.getElementById('pf-total-pnl');
+    tp.textContent = _pnlSign(summary.total_pnl) + '¥' + _fmtMoney(summary.total_pnl) +
+        ' (' + _pnlSign(summary.total_pnl_pct) + summary.total_pnl_pct.toFixed(2) + '%)';
+    tp.className = 'metric-value ' + _pnlClass(summary.total_pnl);
+
+    const td = document.getElementById('pf-today-pnl');
+    td.textContent = _pnlSign(summary.today_pnl) + '¥' + _fmtMoney(summary.today_pnl);
+    td.className = 'metric-value ' + _pnlClass(summary.today_pnl);
+
+    // ---- 侧边栏概况 ----
+    const side = document.getElementById('pf-summary-side');
+    side.innerHTML = `
+        <div style="margin-bottom:6px;">股票: <strong>${summary.stock_count}</strong>只 / 基金: <strong>${summary.fund_count}</strong>只</div>
+        <div style="margin-bottom:6px;">股票市值: <strong style="color:var(--accent)">¥${_fmtMoney(summary.stock_value)}</strong></div>
+        <div style="margin-bottom:6px;">基金市值: <strong style="color:var(--accent)">¥${_fmtMoney(summary.fund_value)}</strong></div>
+        <div>总收益率: <strong class="${_pnlClass(summary.total_pnl_pct)}">${_pnlSign(summary.total_pnl_pct)}${summary.total_pnl_pct.toFixed(2)}%</strong></div>
+    `;
+
+    // ---- 股票持仓表 ----
+    const stb = document.getElementById('pf-stock-tbody');
+    document.getElementById('pf-stock-count').textContent = stocks.length;
+    if (stocks.length === 0) {
+        stb.innerHTML = '<tr><td colspan="10" class="text-center text-muted">暂无股票持仓，请在左侧添加</td></tr>';
+        document.getElementById('pf-stock-summary-line').textContent = '--';
+    } else {
+        const stockPnl = stocks.reduce((s, x) => s + x.float_pnl, 0);
+        const stockToday = stocks.reduce((s, x) => s + x.today_pnl, 0);
+        document.getElementById('pf-stock-summary-line').innerHTML =
+            `浮动盈亏: <span style="color:${stockPnl >= 0 ? 'var(--green)' : 'var(--red)'};">${_pnlSign(stockPnl)}¥${_fmtMoney(stockPnl)}</span>` +
+            ` | 今日: <span style="color:${stockToday >= 0 ? 'var(--green)' : 'var(--red)'};">${_pnlSign(stockToday)}¥${_fmtMoney(stockToday)}</span>`;
+
+        stb.innerHTML = stocks.map(s => `<tr>
+            <td><a class="stock-link" href="javascript:void(0)" onclick="openKline('${s.symbol}','${s.market}')">${s.symbol}</a></td>
+            <td>${s.name}</td>
+            <td>${s.quantity.toLocaleString()}</td>
+            <td>${s.avg_cost.toFixed(2)}</td>
+            <td style="font-weight:600;">${s.current_price > 0 ? s.current_price.toFixed(2) : '--'}</td>
+            <td style="color:${_pctColor(s.change_pct)};">${_pctStr(s.change_pct)}</td>
+            <td style="color:${_pctColor(s.float_pnl_pct)};">${_pctStr(s.float_pnl_pct)}</td>
+            <td style="color:${_pctColor(s.float_pnl)};font-weight:600;">${_pnlSign(s.float_pnl)}¥${_fmtMoney(Math.abs(s.float_pnl))}</td>
+            <td style="color:${_pctColor(s.today_pnl)};">${_pnlSign(s.today_pnl)}¥${_fmtMoney(Math.abs(s.today_pnl))}</td>
+            <td>
+                <button class="pf-action-btn" title="编辑" onclick="editPortfolioStock('${s.symbol}','${s.market}',this)"><i class="fas fa-edit"></i></button>
+                <button class="pf-action-btn danger" title="删除" onclick="removePortfolioStock('${s.symbol}','${s.market}')"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`).join('');
+    }
+
+    // ---- 基金持仓表 ----
+    const ftb = document.getElementById('pf-fund-tbody');
+    document.getElementById('pf-fund-count').textContent = funds.length;
+    if (funds.length === 0) {
+        ftb.innerHTML = '<tr><td colspan="10" class="text-center text-muted">暂无基金持仓，请在左侧添加</td></tr>';
+        document.getElementById('pf-fund-summary-line').textContent = '--';
+    } else {
+        const fundPnl = funds.reduce((s, x) => s + x.float_pnl, 0);
+        const fundToday = funds.reduce((s, x) => s + x.today_pnl, 0);
+        document.getElementById('pf-fund-summary-line').innerHTML =
+            `浮动盈亏: <span style="color:${fundPnl >= 0 ? 'var(--green)' : 'var(--red)'};">${_pnlSign(fundPnl)}¥${_fmtMoney(fundPnl)}</span>` +
+            ` | 今日: <span style="color:${fundToday >= 0 ? 'var(--green)' : 'var(--red)'};">${_pnlSign(fundToday)}¥${_fmtMoney(fundToday)}</span>`;
+
+        ftb.innerHTML = funds.map(f => `<tr>
+            <td><a class="fund-code-link" href="javascript:void(0)" onclick="openFundDetail('${f.code}')">${f.code}</a></td>
+            <td>${f.name}</td>
+            <td>${f.shares.toLocaleString()}</td>
+            <td>${f.avg_nav.toFixed(4)}</td>
+            <td style="font-weight:600;">${f.estimated_nav > 0 ? f.estimated_nav.toFixed(4) : '--'}</td>
+            <td style="color:${_pctColor(f.estimated_change)};">${_pctStr(f.estimated_change)}</td>
+            <td style="color:${_pctColor(f.float_pnl_pct)};">${_pctStr(f.float_pnl_pct)}</td>
+            <td style="color:${_pctColor(f.float_pnl)};font-weight:600;">${_pnlSign(f.float_pnl)}¥${_fmtMoney(Math.abs(f.float_pnl))}</td>
+            <td style="color:${_pctColor(f.today_pnl)};">${_pnlSign(f.today_pnl)}¥${_fmtMoney(Math.abs(f.today_pnl))}</td>
+            <td>
+                <button class="pf-action-btn" title="编辑" onclick="editPortfolioFund('${f.code}',this)"><i class="fas fa-edit"></i></button>
+                <button class="pf-action-btn danger" title="删除" onclick="removePortfolioFund('${f.code}')"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`).join('');
+    }
+}
+
+// ---- 添加股票 ----
+// ---- 自动查询股票 ----
+async function lookupPortfolioStock() {
+    const code = document.getElementById('pf-stock-code').value.trim();
+    const date = document.getElementById('pf-stock-date').value;
+    if (!code) { alert('请先填写股票代码'); return; }
+    const btn = document.getElementById('pf-stock-lookup-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 查询中...';
+    try {
+        const res = await fetch(`/api/portfolio/lookup_stock?symbol=${encodeURIComponent(code)}&date=${date}`);
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('pf-stock-name').value = data.name || '';
+            document.getElementById('pf-stock-cost').value = data.purchase_price > 0 ? data.purchase_price.toFixed(2) : '';
+            document.getElementById('pf-stock-market').value = data.market || 'A_SHARE';
+            document.getElementById('pf-stock-lookup-result').style.display = 'block';
+            const actualDate = data.actual_date;
+            if (actualDate && actualDate !== date) {
+                document.getElementById('pf-stock-cost').title = `购买日(${date})非交易日，已取最近交易日(${actualDate})收盘价`;
+            }
+        } else {
+            alert(data.error || '查询失败');
+        }
+    } catch (e) {
+        alert('查询失败: ' + e.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-search"></i> 自动查询';
+}
+
+// ---- 添加股票 ----
+async function addPortfolioStock() {
+    const code = document.getElementById('pf-stock-code').value.trim();
+    const name = document.getElementById('pf-stock-name').value.trim();
+    const qty = parseFloat(document.getElementById('pf-stock-qty').value);
+    const cost = parseFloat(document.getElementById('pf-stock-cost').value);
+    const market = document.getElementById('pf-stock-market').value;
+    const notes = document.getElementById('pf-stock-notes').value.trim();
+    if (!code || !qty) { alert('请填写股票代码和数量'); return; }
+    if (!cost) { alert('请先点击"自动查询"获取成本价，或手动填写'); return; }
+    try {
+        const res = await fetch('/api/portfolio/add_stock', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ symbol: code, name, quantity: qty, avg_cost: cost, market, notes }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('pf-stock-code').value = '';
+            document.getElementById('pf-stock-date').value = '';
+            document.getElementById('pf-stock-qty').value = '';
+            document.getElementById('pf-stock-cost').value = '';
+            document.getElementById('pf-stock-name').value = '';
+            document.getElementById('pf-stock-notes').value = '';
+            document.getElementById('pf-stock-lookup-result').style.display = 'none';
+            refreshPortfolio();
+        } else {
+            alert(data.error || data.message || '添加失败');
+        }
+    } catch (e) { alert('请求失败: ' + e.message); }
+}
+
+// ---- 自动查询基金 ----
+async function lookupPortfolioFund() {
+    const code = document.getElementById('pf-fund-code').value.trim();
+    const date = document.getElementById('pf-fund-date').value;
+    if (!code) { alert('请先填写基金代码'); return; }
+    const btn = document.getElementById('pf-fund-lookup-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 查询中...';
+    try {
+        const res = await fetch(`/api/portfolio/lookup_fund?code=${encodeURIComponent(code)}&date=${date}`);
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('pf-fund-name').value = data.name || '';
+            document.getElementById('pf-fund-nav').value = data.purchase_nav > 0 ? data.purchase_nav.toFixed(4) : '';
+            document.getElementById('pf-fund-lookup-result').style.display = 'block';
+            const actualDate = data.actual_date;
+            if (actualDate && actualDate !== date) {
+                document.getElementById('pf-fund-nav').title = `购买日(${date})非交易日，已取最近交易日(${actualDate})净值`;
+            }
+        } else {
+            alert(data.error || '查询失败');
+        }
+    } catch (e) {
+        alert('查询失败: ' + e.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-search"></i> 自动查询';
+}
+
+// ---- 添加基金 ----
+async function addPortfolioFund() {
+    const code = document.getElementById('pf-fund-code').value.trim();
+    const name = document.getElementById('pf-fund-name').value.trim();
+    const shares = parseFloat(document.getElementById('pf-fund-shares').value);
+    const nav = parseFloat(document.getElementById('pf-fund-nav').value);
+    const notes = document.getElementById('pf-fund-notes').value.trim();
+    if (!code || !shares) { alert('请填写基金代码和份额'); return; }
+    if (!nav) { alert('请先点击"自动查询"获取成本净值，或手动填写'); return; }
+    try {
+        const res = await fetch('/api/portfolio/add_fund', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ code, name, shares, avg_nav: nav, notes }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('pf-fund-code').value = '';
+            document.getElementById('pf-fund-date').value = '';
+            document.getElementById('pf-fund-shares').value = '';
+            document.getElementById('pf-fund-nav').value = '';
+            document.getElementById('pf-fund-name').value = '';
+            document.getElementById('pf-fund-notes').value = '';
+            document.getElementById('pf-fund-lookup-result').style.display = 'none';
+            refreshPortfolio();
+        } else {
+            alert(data.error || data.message || '添加失败');
+        }
+    } catch (e) { alert('请求失败: ' + e.message); }
+}
+
+// ---- 删除股票 ----
+async function removePortfolioStock(symbol, market) {
+    if (!confirm(`确认删除 ${symbol}(${market === 'US' ? '美股' : 'A股'}) 的持仓？`)) return;
+    try {
+        const res = await fetch('/api/portfolio/remove_stock', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ symbol, market }),
+        });
+        const data = await res.json();
+        if (data.success) refreshPortfolio();
+        else alert(data.error || '删除失败');
+    } catch (e) { alert('请求失败: ' + e.message); }
+}
+
+// ---- 删除基金 ----
+async function removePortfolioFund(code) {
+    if (!confirm(`确认删除基金 ${code} 的持仓？`)) return;
+    try {
+        const res = await fetch('/api/portfolio/remove_fund', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ code }),
+        });
+        const data = await res.json();
+        if (data.success) refreshPortfolio();
+        else alert(data.error || '删除失败');
+    } catch (e) { alert('请求失败: ' + e.message); }
+}
+
+// ---- 编辑股票（行内编辑） ----
+function editPortfolioStock(symbol, market, btn) {
+    const tr = btn.closest('tr');
+    const cells = tr.querySelectorAll('td');
+    const qtyCell = cells[2];
+    const costCell = cells[3];
+    const origQty = qtyCell.textContent.replace(/,/g, '');
+    const origCost = costCell.textContent;
+
+    qtyCell.innerHTML = `<input class="pf-edit-input" type="number" value="${origQty}" id="pf-edit-qty" step="100">`;
+    costCell.innerHTML = `<input class="pf-edit-input" type="number" value="${origCost}" id="pf-edit-cost" step="0.01">`;
+    const actionCell = cells[9];
+    actionCell.innerHTML = `
+        <button class="pf-action-btn" style="color:var(--green)" onclick="savePortfolioStock('${symbol}','${market}')"><i class="fas fa-check"></i></button>
+        <button class="pf-action-btn" onclick="refreshPortfolio()"><i class="fas fa-times"></i></button>
+    `;
+    document.getElementById('pf-edit-qty').focus();
+}
+
+async function savePortfolioStock(symbol, market) {
+    const qty = parseFloat(document.getElementById('pf-edit-qty').value);
+    const cost = parseFloat(document.getElementById('pf-edit-cost').value);
+    if (!qty || !cost) { alert('数量和成本价不能为空'); return; }
+    try {
+        const res = await fetch('/api/portfolio/update_stock', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ symbol, market, quantity: qty, avg_cost: cost }),
+        });
+        const data = await res.json();
+        if (data.success) refreshPortfolio();
+        else alert(data.error || '修改失败');
+    } catch (e) { alert('请求失败: ' + e.message); }
+}
+
+// ---- 编辑基金（行内编辑） ----
+function editPortfolioFund(code, btn) {
+    const tr = btn.closest('tr');
+    const cells = tr.querySelectorAll('td');
+    const sharesCell = cells[2];
+    const navCell = cells[3];
+    const origShares = sharesCell.textContent.replace(/,/g, '');
+    const origNav = navCell.textContent;
+
+    sharesCell.innerHTML = `<input class="pf-edit-input" type="number" value="${origShares}" id="pf-edit-shares" step="100">`;
+    navCell.innerHTML = `<input class="pf-edit-input" type="number" value="${origNav}" id="pf-edit-nav" step="0.0001">`;
+    const actionCell = cells[9];
+    actionCell.innerHTML = `
+        <button class="pf-action-btn" style="color:var(--green)" onclick="savePortfolioFund('${code}')"><i class="fas fa-check"></i></button>
+        <button class="pf-action-btn" onclick="refreshPortfolio()"><i class="fas fa-times"></i></button>
+    `;
+    document.getElementById('pf-edit-shares').focus();
+}
+
+async function savePortfolioFund(code) {
+    const shares = parseFloat(document.getElementById('pf-edit-shares').value);
+    const nav = parseFloat(document.getElementById('pf-edit-nav').value);
+    if (!shares || !nav) { alert('份额和净值不能为空'); return; }
+    try {
+        const res = await fetch('/api/portfolio/update_fund', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ code, shares, avg_nav: nav }),
+        });
+        const data = await res.json();
+        if (data.success) refreshPortfolio();
+        else alert(data.error || '修改失败');
+    } catch (e) { alert('请求失败: ' + e.message); }
+}
+
+// ---- 自动刷新控制 ----
+function togglePortfolioAuto() {
+    const checked = document.getElementById('pf-rt-auto').checked;
+    if (checked) {
+        if (_pfAutoTimer) clearInterval(_pfAutoTimer);
+        _pfAutoTimer = setInterval(refreshPortfolio, _pfAutoInterval);
+    } else {
+        if (_pfAutoTimer) { clearInterval(_pfAutoTimer); _pfAutoTimer = null; }
+    }
+}
 </script>
 </body>
 </html>

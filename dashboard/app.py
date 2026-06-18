@@ -80,8 +80,33 @@ def create_app() -> Flask:
     app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), "templates"))
     app.json = SafeJSONProvider(app)
 
+    # ---- 安全配置 ----
+    app.secret_key = os.environ.get("FLASK_SECRET_KEY", "quantx-dev-secret-change-in-prod")
+
+    # ---- 数据库初始化 ----
+    from dashboard.db import init_db, close_db
+    init_db()
+    app.teardown_appcontext(lambda exc: close_db())
+
+    # ---- 用户认证 ----
+    from dashboard.auth import auth_bp, login_manager
+    login_manager.init_app(app)
+    app.register_blueprint(auth_bp)
+
+    # ---- API 登录保护 ----
+    from flask_login import current_user
+    @app.before_request
+    def require_login_for_api():
+        """所有 /api/ 路由需要登录，否则返回 401"""
+        if request.path.startswith("/api/") and not current_user.is_authenticated:
+            return jsonify({"error": "请先登录", "redirect": "/auth/login"}), 401
+
     @app.route("/")
     def index():
+        from flask_login import current_user as cu
+        if not cu.is_authenticated:
+            from flask import redirect
+            return redirect("/auth/login")
         return render_template("index.html")
 
     # ==============================================================
@@ -257,7 +282,7 @@ def create_app() -> Flask:
         strategy = STRATEGY_REGISTRY[strategy_name](params.get("strategy_params", {}))
         session = paper_manager.create_session(
             session_id, strategy, symbols, market,
-            tick_interval=tick_interval,
+            tick_interval=tick_interval, user_id=current_user.id,
         )
         session.start()
 
@@ -266,7 +291,7 @@ def create_app() -> Flask:
     @app.route("/api/paper/stop", methods=["POST"])
     def api_paper_stop():
         session_id = request.json.get("session_id", "default")
-        session = paper_manager.get_session(session_id)
+        session = paper_manager.get_session(session_id, user_id=current_user.id)
         if session:
             session.stop()
             return jsonify({"success": True})
@@ -275,7 +300,7 @@ def create_app() -> Flask:
     @app.route("/api/paper/status")
     def api_paper_status():
         session_id = request.args.get("session_id", "default")
-        session = paper_manager.get_session(session_id)
+        session = paper_manager.get_session(session_id, user_id=current_user.id)
         if session:
             return jsonify(session.get_status())
         return jsonify({"error": "会话不存在"}), 404
@@ -284,7 +309,7 @@ def create_app() -> Flask:
     def api_paper_force_tick():
         """手动触发一次行情扫描 + 自动执行买卖"""
         session_id = request.json.get("session_id", "default")
-        session = paper_manager.get_session(session_id)
+        session = paper_manager.get_session(session_id, user_id=current_user.id)
         if session:
             result = session.force_tick()
             return jsonify({"success": True, "result": result})
@@ -292,7 +317,7 @@ def create_app() -> Flask:
 
     @app.route("/api/paper/sessions")
     def api_paper_sessions():
-        return jsonify(paper_manager.get_all_status())
+        return jsonify(paper_manager.get_all_status(user_id=current_user.id))
 
     # ==============================================================
     # API: 自动交易（AutoTrader - 逐K线自动跑数据）
@@ -315,7 +340,8 @@ def create_app() -> Flask:
 
         strategy = STRATEGY_REGISTRY[strategy_name](params.get("strategy_params", {}))
         trader = paper_manager.create_auto_trader(
-            trader_id, strategy, symbols, market, capital, speed_ms
+            trader_id, strategy, symbols, market, capital, speed_ms,
+            user_id=current_user.id,
         )
 
         try:
@@ -332,7 +358,7 @@ def create_app() -> Flask:
     @app.route("/api/auto/stop", methods=["POST"])
     def api_auto_stop():
         trader_id = request.json.get("trader_id", "default")
-        trader = paper_manager.get_auto_trader(trader_id)
+        trader = paper_manager.get_auto_trader(trader_id, user_id=current_user.id)
         if trader:
             trader.stop()
             return jsonify({"success": True})
@@ -341,7 +367,7 @@ def create_app() -> Flask:
     @app.route("/api/auto/status")
     def api_auto_status():
         trader_id = request.args.get("trader_id", "default")
-        trader = paper_manager.get_auto_trader(trader_id)
+        trader = paper_manager.get_auto_trader(trader_id, user_id=current_user.id)
         if trader:
             return jsonify(trader.get_status())
         return jsonify({"error": "自动交易器不存在"}), 404
@@ -392,7 +418,8 @@ def create_app() -> Flask:
         )
 
         # 先注册 trader（前端可立即查询进度）
-        smart_traders[trader_id] = trader
+        smart_key = f"{current_user.id}:{trader_id}"
+        smart_traders[smart_key] = trader
 
         # 后台线程加载数据 + 启动交易
         def _init_and_run():
@@ -416,7 +443,8 @@ def create_app() -> Flask:
     @app.route("/api/smart/stop", methods=["POST"])
     def api_smart_stop():
         trader_id = request.json.get("trader_id", "default")
-        trader = smart_traders.get(trader_id)
+        smart_key = f"{current_user.id}:{trader_id}"
+        trader = smart_traders.get(smart_key)
         if trader:
             trader.stop()
             return jsonify({"success": True})
@@ -425,7 +453,8 @@ def create_app() -> Flask:
     @app.route("/api/smart/status")
     def api_smart_status():
         trader_id = request.args.get("trader_id", "default")
-        trader = smart_traders.get(trader_id)
+        smart_key = f"{current_user.id}:{trader_id}"
+        trader = smart_traders.get(smart_key)
         if trader:
             return jsonify(trader.get_status())
         return jsonify({"error": "智能交易器不存在"}), 404
@@ -488,7 +517,7 @@ def create_app() -> Flask:
         """执行今日交易"""
         try:
             market = request.json.get("market", "A_SHARE") if request.is_json else request.args.get("market", "A_SHARE")
-            trader = DailyTrader.load_or_create(market=market)
+            trader = DailyTrader.load_or_create(market=market, user_id=current_user.id)
             result = trader.run_today()
             return jsonify(result)
         except Exception as e:
@@ -500,7 +529,7 @@ def create_app() -> Flask:
         """获取每日交易器完整状态"""
         try:
             market = request.args.get("market", "A_SHARE")
-            trader = DailyTrader.load_or_create(market=market)
+            trader = DailyTrader.load_or_create(market=market, user_id=current_user.id)
             return jsonify(trader.get_full_status())
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -510,7 +539,7 @@ def create_app() -> Flask:
         """重置每日交易器"""
         try:
             market = request.json.get("market", "A_SHARE") if request.is_json else request.args.get("market", "A_SHARE")
-            trader = DailyTrader.load_or_create(market=market)
+            trader = DailyTrader.load_or_create(market=market, user_id=current_user.id)
             trader.reset()
             return jsonify({"success": True, "message": f"每日交易器已重置 ({market})"})
         except Exception as e:
@@ -737,6 +766,393 @@ def create_app() -> Flask:
 
         except Exception as e:
             logger.warning(f"股票搜索失败: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    # ================================================================
+    # 基金 API
+    # ================================================================
+    @app.route("/api/fund/overview")
+    def api_fund_overview():
+        """基金市场大盘概览"""
+        try:
+            from data.fund_fetcher import fetch_fund_market_overview
+            data = fetch_fund_market_overview()
+            return jsonify({"success": True, **data})
+        except Exception as e:
+            logger.exception("基金大盘数据获取失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/companies")
+    def api_fund_companies():
+        """头部基金公司排名"""
+        try:
+            from data.fund_fetcher import fetch_fund_company_ranking
+            top = int(request.args.get("top", 20))
+            companies = fetch_fund_company_ranking(top=top)
+            return jsonify({"success": True, "companies": companies})
+        except Exception as e:
+            logger.exception("基金公司排名获取失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/ranking")
+    def api_fund_ranking():
+        """基金涨跌排行"""
+        try:
+            from data.fund_fetcher import fetch_fund_ranking_today
+            fund_type = request.args.get("type", "all")
+            sort_by = request.args.get("sort", "rzdf")
+            top = int(request.args.get("top", 50))
+            funds = fetch_fund_ranking_today(top=top, fund_type=fund_type, sort_by=sort_by)
+            return jsonify({"success": True, "funds": funds, "count": len(funds)})
+        except Exception as e:
+            logger.exception("基金排行获取失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/realtime")
+    def api_fund_realtime():
+        """单只基金实时估值"""
+        try:
+            from data.fund_fetcher import fetch_fund_realtime_estimate
+            code = request.args.get("code", "").strip()
+            if not code:
+                return jsonify({"error": "请输入基金代码"}), 400
+            data = fetch_fund_realtime_estimate(code)
+            return jsonify({"success": True, **data})
+        except Exception as e:
+            logger.exception("基金实时估值获取失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/realtime_batch")
+    def api_fund_realtime_batch():
+        """批量获取基金实时估值"""
+        try:
+            from data.fund_fetcher import fetch_fund_realtime_batch
+            codes_str = request.args.get("codes", "").strip()
+            if not codes_str:
+                return jsonify({"error": "请输入基金代码列表"}), 400
+            codes = [c.strip() for c in codes_str.split(",") if c.strip()]
+            results = fetch_fund_realtime_batch(codes)
+            return jsonify({"success": True, "funds": results, "count": len(results)})
+        except Exception as e:
+            logger.exception("批量基金实时估值获取失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/nav_history")
+    def api_fund_nav_history():
+        """基金历史净值"""
+        try:
+            from data.fund_fetcher import fetch_fund_nav_history
+            code = request.args.get("code", "").strip()
+            days = int(request.args.get("days", 90))
+            if not code:
+                return jsonify({"error": "请输入基金代码"}), 400
+            nav_list = fetch_fund_nav_history(code, days=days)
+            return jsonify({"success": True, "nav_history": nav_list, "count": len(nav_list)})
+        except Exception as e:
+            logger.exception("基金净值历史获取失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/screen", methods=["POST"])
+    def api_fund_screen():
+        """智能选基 - 多维筛选"""
+        try:
+            from data.fund_fetcher import fetch_fund_screening
+            body = request.json or {}
+            fund_type = body.get("fund_type", "all")
+            sort_by = body.get("sort_by", "1nzf")
+            page = int(body.get("page", 1))
+            size = int(body.get("size", 100))
+            result = fetch_fund_screening(fund_type=fund_type, sort_by=sort_by, page=page, size=size)
+            return jsonify({"success": True, **result})
+        except Exception as e:
+            logger.exception("基金筛选失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/detail")
+    def api_fund_detail():
+        """基金详情"""
+        try:
+            from data.fund_fetcher import fetch_fund_detail
+            code = request.args.get("code", "").strip()
+            if not code:
+                return jsonify({"error": "请输入基金代码"}), 400
+            detail = fetch_fund_detail(code)
+            return jsonify({"success": True, **detail})
+        except Exception as e:
+            logger.exception("基金详情获取失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/search")
+    def api_fund_search():
+        """基金搜索"""
+        try:
+            from data.fund_fetcher import search_funds
+            q = request.args.get("q", "").strip()
+            fund_type = request.args.get("type", "all")
+            top = int(request.args.get("top", 30))
+            if not q:
+                return jsonify({"success": True, "funds": []})
+            funds = search_funds(q, fund_type=fund_type, top=top)
+            return jsonify({"success": True, "funds": funds})
+        except Exception as e:
+            logger.exception("基金搜索失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fund/types")
+    def api_fund_types():
+        """获取基金类型列表"""
+        return jsonify({"success": True, "types": config.FUND_TYPES, "sort_options": config.FUND_SORT_OPTIONS})
+
+    # ==================== 我的持仓 ====================
+    @app.route("/api/portfolio/holdings")
+    def api_portfolio_holdings():
+        """获取全部持仓 + 实时行情 + 收益计算"""
+        try:
+            from flask_login import current_user
+            from dashboard import models
+            uid = current_user.id
+            stocks = models.get_portfolio_stocks(uid)
+            funds = models.get_portfolio_funds(uid)
+
+            # 实时行情计算
+            stock_results = []
+            if stocks:
+                try:
+                    from data.live_fetcher import fetch_realtime_quote
+                    for s in stocks:
+                        mkt = s.get("market", "A_SHARE")
+                        quote = fetch_realtime_quote(s["symbol"], mkt)
+                        cur_price = quote.get("price", 0) or 0
+                        prev_close = quote.get("prev_close", 0) or 0
+                        today_chg_pct = ((cur_price - prev_close) / prev_close * 100) if prev_close else 0
+                        cost = s.get("avg_cost", 0) or 0
+                        qty = s.get("quantity", 0) or 0
+                        pnl_pct = ((cur_price - cost) / cost * 100) if cost else 0
+                        pnl_amt = (cur_price - cost) * qty
+                        today_pnl = (cur_price - prev_close) * qty
+                        stock_results.append({
+                            "symbol": s["symbol"], "name": s.get("name", ""),
+                            "quantity": qty, "avg_cost": cost,
+                            "current_price": cur_price, "market": mkt,
+                            "today_change_pct": round(today_chg_pct, 2),
+                            "pnl_pct": round(pnl_pct, 2),
+                            "pnl_amount": round(pnl_amt, 2),
+                            "today_pnl": round(today_pnl, 2),
+                            "notes": s.get("notes", ""),
+                        })
+                except Exception as e:
+                    logger.warning("股票实时行情获取失败: %s", e)
+                    for s in stocks:
+                        stock_results.append({
+                            "symbol": s["symbol"], "name": s.get("name", ""),
+                            "quantity": s.get("quantity", 0), "avg_cost": s.get("avg_cost", 0),
+                            "current_price": 0, "market": s.get("market", "A_SHARE"),
+                            "today_change_pct": 0, "pnl_pct": 0, "pnl_amount": 0, "today_pnl": 0,
+                            "notes": s.get("notes", ""),
+                        })
+
+            fund_results = []
+            if funds:
+                try:
+                    from data.fund_fetcher import fetch_fund_realtime_batch
+                    codes = [f["fund_code"] for f in funds]
+                    rt_data = fetch_fund_realtime_batch(codes)
+                    rt_map = {r["code"]: r for r in rt_data} if rt_data else {}
+                    for f in funds:
+                        rt = rt_map.get(f["fund_code"], {})
+                        est_nav = rt.get("estimated_nav", 0) or 0
+                        nav = f.get("avg_nav", 0) or 0
+                        shares = f.get("shares", 0) or 0
+                        prev_nav = rt.get("nav", 0) or 0
+                        today_chg_pct = rt.get("estimated_change", 0) or 0
+                        pnl_pct = ((est_nav - nav) / nav * 100) if nav else 0
+                        pnl_amt = (est_nav - nav) * shares
+                        today_pnl = (est_nav - prev_nav) * shares if prev_nav else 0
+                        fund_results.append({
+                            "code": f["fund_code"], "name": f.get("fund_name", ""),
+                            "shares": shares, "avg_nav": nav,
+                            "estimated_nav": est_nav,
+                            "today_change_pct": round(today_chg_pct, 2),
+                            "pnl_pct": round(pnl_pct, 2),
+                            "pnl_amount": round(pnl_amt, 2),
+                            "today_pnl": round(today_pnl, 2),
+                            "notes": f.get("notes", ""),
+                        })
+                except Exception as e:
+                    logger.warning("基金实时估值获取失败: %s", e)
+                    for f in funds:
+                        fund_results.append({
+                            "code": f["fund_code"], "name": f.get("fund_name", ""),
+                            "shares": f.get("shares", 0), "avg_nav": f.get("avg_nav", 0),
+                            "estimated_nav": 0, "today_change_pct": 0,
+                            "pnl_pct": 0, "pnl_amount": 0, "today_pnl": 0,
+                            "notes": f.get("notes", ""),
+                        })
+
+            # 汇总
+            total_value = sum(s["current_price"] * s["quantity"] for s in stock_results) + \
+                          sum(f["estimated_nav"] * f["shares"] for f in fund_results)
+            total_cost = sum(s["avg_cost"] * s["quantity"] for s in stock_results) + \
+                         sum(f["avg_nav"] * f["shares"] for f in fund_results)
+            total_pnl = total_value - total_cost
+            today_pnl = sum(s["today_pnl"] for s in stock_results) + sum(f["today_pnl"] for f in fund_results)
+
+            return jsonify({"success": True,
+                "stocks": stock_results, "funds": fund_results,
+                "summary": {
+                    "total_value": round(total_value, 2), "total_cost": round(total_cost, 2),
+                    "total_pnl": round(total_pnl, 2),
+                    "total_pnl_pct": round(total_pnl / total_cost * 100, 2) if total_cost else 0,
+                    "today_pnl": round(today_pnl, 2),
+                    "stock_count": len(stock_results), "fund_count": len(fund_results),
+                }
+            })
+        except Exception as e:
+            logger.exception("获取持仓数据失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/portfolio/realtime")
+    def api_portfolio_realtime():
+        """刷新实时行情（同 holdings）"""
+        return api_portfolio_holdings()
+
+    @app.route("/api/portfolio/add_stock", methods=["POST"])
+    def api_portfolio_add_stock():
+        """添加股票持仓"""
+        try:
+            from flask_login import current_user
+            from dashboard import models
+            body = request.json or {}
+            symbol = (body.get("symbol") or "").strip()
+            name = (body.get("name") or "").strip()
+            if not symbol:
+                return jsonify({"success": False, "error": "请输入股票代码"}), 400
+            models.add_stock(
+                current_user.id, symbol, name,
+                float(body.get("quantity", 0)),
+                float(body.get("avg_cost", 0)),
+                body.get("market", "A_SHARE"),
+                body.get("notes", ""),
+            )
+            return jsonify({"success": True})
+        except Exception as e:
+            logger.exception("添加股票持仓失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/portfolio/remove_stock", methods=["POST"])
+    def api_portfolio_remove_stock():
+        """删除股票持仓"""
+        try:
+            from flask_login import current_user
+            from dashboard import models
+            body = request.json or {}
+            symbol = (body.get("symbol") or "").strip()
+            if not symbol:
+                return jsonify({"success": False, "error": "请输入股票代码"}), 400
+            models.remove_stock(current_user.id, symbol)
+            return jsonify({"success": True})
+        except Exception as e:
+            logger.exception("删除股票持仓失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/portfolio/update_stock", methods=["POST"])
+    def api_portfolio_update_stock():
+        """修改股票持仓"""
+        try:
+            from flask_login import current_user
+            from dashboard import models
+            body = request.json or {}
+            symbol = (body.get("symbol") or "").strip()
+            if not symbol:
+                return jsonify({"success": False, "error": "请输入股票代码"}), 400
+            models.update_stock(current_user.id, symbol, **body)
+            return jsonify({"success": True})
+        except Exception as e:
+            logger.exception("修改股票持仓失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/portfolio/add_fund", methods=["POST"])
+    def api_portfolio_add_fund():
+        """添加基金持仓"""
+        try:
+            from flask_login import current_user
+            from dashboard import models
+            body = request.json or {}
+            fund_code = (body.get("code") or body.get("fund_code") or "").strip()
+            fund_name = (body.get("name") or body.get("fund_name") or "").strip()
+            if not fund_code:
+                return jsonify({"success": False, "error": "请输入基金代码"}), 400
+            models.add_fund(
+                current_user.id, fund_code, fund_name,
+                float(body.get("shares", 0)),
+                float(body.get("avg_nav", 0)),
+                body.get("notes", ""),
+            )
+            return jsonify({"success": True})
+        except Exception as e:
+            logger.exception("添加基金持仓失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/portfolio/remove_fund", methods=["POST"])
+    def api_portfolio_remove_fund():
+        """删除基金持仓"""
+        try:
+            from flask_login import current_user
+            from dashboard import models
+            body = request.json or {}
+            fund_code = (body.get("code") or body.get("fund_code") or "").strip()
+            if not fund_code:
+                return jsonify({"success": False, "error": "请输入基金代码"}), 400
+            models.remove_fund(current_user.id, fund_code)
+            return jsonify({"success": True})
+        except Exception as e:
+            logger.exception("删除基金持仓失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/portfolio/update_fund", methods=["POST"])
+    def api_portfolio_update_fund():
+        """修改基金持仓"""
+        try:
+            from flask_login import current_user
+            from dashboard import models
+            body = request.json or {}
+            fund_code = (body.get("code") or body.get("fund_code") or "").strip()
+            if not fund_code:
+                return jsonify({"success": False, "error": "请输入基金代码"}), 400
+            models.update_fund(current_user.id, fund_code, **body)
+            return jsonify({"success": True})
+        except Exception as e:
+            logger.exception("修改基金持仓失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/portfolio/lookup_stock")
+    def api_portfolio_lookup_stock():
+        """根据股票代码+购买日期自动查询名称、价格等"""
+        try:
+            from data.portfolio_manager import lookup_stock_info
+            symbol = request.args.get("symbol", "").strip()
+            date = request.args.get("date", "").strip()
+            if not symbol:
+                return jsonify({"error": "请输入股票代码"}), 400
+            info = lookup_stock_info(symbol, date)
+            return jsonify({"success": True, **info})
+        except Exception as e:
+            logger.exception("查询股票信息失败")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/portfolio/lookup_fund")
+    def api_portfolio_lookup_fund():
+        """根据基金代码+购买日期自动查询名称、净值等"""
+        try:
+            from data.portfolio_manager import lookup_fund_info
+            code = request.args.get("code", "").strip()
+            date = request.args.get("date", "").strip()
+            if not code:
+                return jsonify({"error": "请输入基金代码"}), 400
+            info = lookup_fund_info(code, date)
+            return jsonify({"success": True, **info})
+        except Exception as e:
+            logger.exception("查询基金信息失败")
             return jsonify({"error": str(e)}), 500
 
     return app

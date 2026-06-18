@@ -1,9 +1,17 @@
 services:
   - type: web
-    name: quant-trading-system
+    name: quantx-trading
     runtime: docker
     dockerfilePath: Dockerfile
-    plan: free
+    plan: starter
+    disk:
+      name: data
+      mountPath: /app/data
+      sizeGB: 1
     envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true
       - key: FLASK_DEBUG
         value: "false"
+      - key: QUANTX_DATA_DIR
+        value: /app/data

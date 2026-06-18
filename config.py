@@ -29,6 +29,17 @@ DASHBOARD_HOST = os.environ.get("HOST", "0.0.0.0")
 DASHBOARD_PORT = int(os.environ.get("PORT", 8050))
 DASHBOARD_DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1", "yes")
 
+# ===== 基金配置 =====
+FUND_TYPES = {
+    "all": "全部", "gp": "股票型", "hh": "混合型", "zq": "债券型",
+    "zs": "指数型", "qdii": "QDII", "fof": "FOF",
+}
+FUND_SORT_OPTIONS = {
+    "rzdf": "日涨幅", "1yzf": "近1周", "1nzf": "近1年",
+    "jnzf": "今年来", "3nzf": "近3年", "lnzf": "成立以来",
+}
+FUND_RANKING_DEFAULT_SIZE = 50
+
 # ===== 日志配置 =====
 LOG_LEVEL = "INFO"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
